@@ -33,59 +33,6 @@ type PerfilRow = {
   uf: string;
 };
 
-function normalizarRepresentadas(valor: unknown): string[] {
-  if (!Array.isArray(valor)) return [];
-
-  return Array.from(
-    new Set(
-      valor
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
-function perfilDoMetadata(userId: string, metadata: Record<string, unknown>): PerfilComercial | null {
-  const obrigatorios = [
-    "nome",
-    "nome_representacao",
-    "documento_tipo",
-    "documento",
-    "whatsapp",
-    "cep",
-    "logradouro",
-    "numero",
-    "bairro",
-    "cidade",
-    "uf",
-  ] as const;
-
-  if (obrigatorios.some((campo) => typeof metadata[campo] !== "string" || !String(metadata[campo]).trim())) {
-    return null;
-  }
-
-  const documentoTipo = String(metadata.documento_tipo).toUpperCase();
-  if (documentoTipo !== "CPF" && documentoTipo !== "CNPJ") return null;
-
-  return {
-    userId,
-    nome: String(metadata.nome).trim(),
-    nomeRepresentacao: String(metadata.nome_representacao).trim(),
-    documentoTipo,
-    documento: String(metadata.documento).trim(),
-    whatsapp: String(metadata.whatsapp).trim(),
-    cep: String(metadata.cep).trim(),
-    logradouro: String(metadata.logradouro).trim(),
-    numero: String(metadata.numero).trim(),
-    complemento: typeof metadata.complemento === "string" ? metadata.complemento.trim() : "",
-    bairro: String(metadata.bairro).trim(),
-    cidade: String(metadata.cidade).trim(),
-    uf: String(metadata.uf).trim().toUpperCase().slice(0, 2),
-    representadas: normalizarRepresentadas(metadata.representadas),
-  };
-}
-
 async function buscarPerfil(userId: string): Promise<PerfilComercial | null> {
   if (!supabase) return null;
 
@@ -203,35 +150,5 @@ export async function salvarPerfilAtual(perfil: Omit<PerfilComercial, "userId">)
 }
 
 export async function sincronizarPerfilDoUsuario(): Promise<PerfilComercial | null> {
-  if (!supabase) return null;
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) return null;
-
-  const existente = await buscarPerfil(user.id);
-  if (existente) return existente;
-
-  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
-  const inicial = perfilDoMetadata(user.id, metadata);
-  if (!inicial) return null;
-
-  return salvarPerfilAtual({
-    nome: inicial.nome,
-    nomeRepresentacao: inicial.nomeRepresentacao,
-    documentoTipo: inicial.documentoTipo,
-    documento: inicial.documento,
-    whatsapp: inicial.whatsapp,
-    cep: inicial.cep,
-    logradouro: inicial.logradouro,
-    numero: inicial.numero,
-    complemento: inicial.complemento,
-    bairro: inicial.bairro,
-    cidade: inicial.cidade,
-    uf: inicial.uf,
-    representadas: inicial.representadas,
-  });
+  return carregarPerfilAtual();
 }
