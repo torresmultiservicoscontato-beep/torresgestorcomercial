@@ -7,11 +7,55 @@ import { supabase } from "../lib/supabase";
 
 type ModoAcesso = "entrar" | "cadastrar" | "recuperar";
 
+type Cadastro = {
+  nome: string;
+  nomeRepresentacao: string;
+  documentoTipo: "CPF" | "CNPJ";
+  documento: string;
+  whatsapp: string;
+  representadas: string;
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+};
+
+const cadastroInicial: Cadastro = {
+  nome: "",
+  nomeRepresentacao: "",
+  documentoTipo: "CNPJ",
+  documento: "",
+  whatsapp: "",
+  representadas: "",
+  cep: "",
+  logradouro: "",
+  numero: "",
+  complemento: "",
+  bairro: "",
+  cidade: "",
+  uf: "",
+};
+
+function listaRepresentadas(valor: string) {
+  return Array.from(
+    new Set(
+      valor
+        .split(/[\n,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [modo, setModo] = useState<ModoAcesso>("entrar");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [cadastro, setCadastro] = useState<Cadastro>(cadastroInicial);
   const [carregando, setCarregando] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [erro, setErro] = useState("");
@@ -23,6 +67,10 @@ export default function LoginPage() {
       if (data.session) router.replace("/");
     });
   }, [router]);
+
+  function atualizarCadastro(campo: keyof Cadastro, valor: string) {
+    setCadastro((atual) => ({ ...atual, [campo]: valor }));
+  }
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,11 +106,31 @@ export default function LoginPage() {
         return;
       }
 
+      const representadas = listaRepresentadas(cadastro.representadas);
+      if (representadas.length === 0) {
+        throw new Error("Informe pelo menos uma representada.");
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: senha,
         options: {
           emailRedirectTo: `${window.location.origin}/login`,
+          data: {
+            nome: cadastro.nome.trim(),
+            nome_representacao: cadastro.nomeRepresentacao.trim(),
+            documento_tipo: cadastro.documentoTipo,
+            documento: cadastro.documento.trim(),
+            whatsapp: cadastro.whatsapp.trim(),
+            representadas,
+            cep: cadastro.cep.trim(),
+            logradouro: cadastro.logradouro.trim(),
+            numero: cadastro.numero.trim(),
+            complemento: cadastro.complemento.trim(),
+            bairro: cadastro.bairro.trim(),
+            cidade: cadastro.cidade.trim(),
+            uf: cadastro.uf.trim().toUpperCase().slice(0, 2),
+          },
         },
       });
 
@@ -95,12 +163,12 @@ export default function LoginPage() {
     modo === "entrar"
       ? "Use seu e-mail e senha para acessar seus clientes e visitas."
       : modo === "cadastrar"
-        ? "Crie seu usuário para que os dados fiquem vinculados à sua conta."
+        ? "Cadastre seus dados comerciais. Eles vão personalizar o painel e poderão ser alterados depois em Configurações."
         : "Informe seu e-mail. Enviaremos um link seguro para você criar uma nova senha.";
 
   return (
     <main className="loginPage">
-      <section className="loginCard">
+      <section className={`loginCard ${modo === "cadastrar" ? "loginCardWide" : ""}`}>
         <div className="loginBrand">
           <div className="brandMark">T</div>
           <div>
@@ -119,6 +187,154 @@ export default function LoginPage() {
         {mensagem && <div className="loginAlert success">{mensagem}</div>}
 
         <form onSubmit={enviar}>
+          {modo === "cadastrar" && (
+            <div className="signupGrid">
+              <label className="field">
+                Nome da pessoa
+                <input
+                  type="text"
+                  required
+                  value={cadastro.nome}
+                  onChange={(event) => atualizarCadastro("nome", event.target.value)}
+                  placeholder="Ex.: Bruno Torres"
+                />
+              </label>
+
+              <label className="field">
+                Nome da representação
+                <input
+                  type="text"
+                  required
+                  value={cadastro.nomeRepresentacao}
+                  onChange={(event) => atualizarCadastro("nomeRepresentacao", event.target.value)}
+                  placeholder="Ex.: Torres Multi Representações"
+                />
+              </label>
+
+              <label className="field">
+                Tipo de documento
+                <select
+                  value={cadastro.documentoTipo}
+                  onChange={(event) =>
+                    atualizarCadastro("documentoTipo", event.target.value as "CPF" | "CNPJ")
+                  }
+                >
+                  <option value="CPF">CPF</option>
+                  <option value="CNPJ">CNPJ</option>
+                </select>
+              </label>
+
+              <label className="field">
+                {cadastro.documentoTipo}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  value={cadastro.documento}
+                  onChange={(event) => atualizarCadastro("documento", event.target.value)}
+                  placeholder={cadastro.documentoTipo === "CPF" ? "000.000.000-00" : "00.000.000/0000-00"}
+                />
+              </label>
+
+              <label className="field">
+                WhatsApp
+                <input
+                  type="tel"
+                  required
+                  value={cadastro.whatsapp}
+                  onChange={(event) => atualizarCadastro("whatsapp", event.target.value)}
+                  placeholder="(21) 99999-9999"
+                />
+              </label>
+
+              <label className="field">
+                CEP
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  value={cadastro.cep}
+                  onChange={(event) => atualizarCadastro("cep", event.target.value)}
+                  placeholder="00000-000"
+                />
+              </label>
+
+              <label className="field signupSpan2">
+                Representadas
+                <textarea
+                  required
+                  value={cadastro.representadas}
+                  onChange={(event) => atualizarCadastro("representadas", event.target.value)}
+                  placeholder={"Digite uma por linha. Ex.:\nKing Ouro\nArgamil\nVedacit"}
+                />
+                <small>Você pode cadastrar várias. Também aceitamos separação por vírgula.</small>
+              </label>
+
+              <label className="field signupSpan2">
+                Endereço
+                <input
+                  type="text"
+                  required
+                  value={cadastro.logradouro}
+                  onChange={(event) => atualizarCadastro("logradouro", event.target.value)}
+                  placeholder="Rua, avenida, estrada..."
+                />
+              </label>
+
+              <label className="field">
+                Número
+                <input
+                  type="text"
+                  required
+                  value={cadastro.numero}
+                  onChange={(event) => atualizarCadastro("numero", event.target.value)}
+                />
+              </label>
+
+              <label className="field">
+                Complemento
+                <input
+                  type="text"
+                  value={cadastro.complemento}
+                  onChange={(event) => atualizarCadastro("complemento", event.target.value)}
+                  placeholder="Opcional"
+                />
+              </label>
+
+              <label className="field">
+                Bairro
+                <input
+                  type="text"
+                  required
+                  value={cadastro.bairro}
+                  onChange={(event) => atualizarCadastro("bairro", event.target.value)}
+                />
+              </label>
+
+              <label className="field">
+                Cidade
+                <input
+                  type="text"
+                  required
+                  value={cadastro.cidade}
+                  onChange={(event) => atualizarCadastro("cidade", event.target.value)}
+                />
+              </label>
+
+              <label className="field">
+                UF
+                <input
+                  type="text"
+                  required
+                  maxLength={2}
+                  value={cadastro.uf}
+                  onChange={(event) => atualizarCadastro("uf", event.target.value.toUpperCase())}
+                  placeholder="RJ"
+                />
+              </label>
+            </div>
+          )}
+
           <label className="field">
             E-mail
             <div className="loginInput">
