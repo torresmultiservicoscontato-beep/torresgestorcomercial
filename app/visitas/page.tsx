@@ -4,12 +4,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 import AppShell from "../components/AppShell";
 import {
+  bancoRemotoAtivo,
   Cliente,
   Visita,
   carregarClientes,
   carregarVisitas,
   clientesIniciais,
-  salvarVisitas,
+  criarVisita,
 } from "../lib/data";
 
 function hojeLocal() {
@@ -23,6 +24,8 @@ function hojeLocal() {
 export default function VisitasPage() {
   const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
   const [visitas, setVisitas] = useState<Visita[]>([]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
   const [form, setForm] = useState({
     clienteId: "",
     data: hojeLocal(),
@@ -32,8 +35,12 @@ export default function VisitasPage() {
   });
 
   useEffect(() => {
-    setClientes(carregarClientes());
-    setVisitas(carregarVisitas());
+    void Promise.all([carregarClientes(), carregarVisitas()])
+      .then(([listaClientes, listaVisitas]) => {
+        setClientes(listaClientes);
+        setVisitas(listaVisitas);
+      })
+      .catch((falha: Error) => setErro(falha.message));
   }, []);
 
   const visitasOrdenadas = useMemo(
@@ -41,8 +48,10 @@ export default function VisitasPage() {
     [visitas],
   );
 
-  function registrarVisita(event: FormEvent<HTMLFormElement>) {
+  async function registrarVisita(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (salvando) return;
+
     const cliente = clientes.find((item) => item.id === form.clienteId);
     if (!cliente) return;
 
@@ -56,16 +65,27 @@ export default function VisitasPage() {
       observacao: form.observacao.trim(),
     };
 
-    const novaLista = [novaVisita, ...visitas];
-    setVisitas(novaLista);
-    salvarVisitas(novaLista);
-    setForm({
-      clienteId: "",
-      data: hojeLocal(),
-      resultado: "Sem venda",
-      odometro: "",
-      observacao: "",
-    });
+    setSalvando(true);
+    setErro("");
+
+    try {
+      const visitaSalva = await criarVisita(novaVisita);
+      setVisitas((lista) => [
+        visitaSalva,
+        ...lista.filter((visita) => visita.id !== visitaSalva.id),
+      ]);
+      setForm({
+        clienteId: "",
+        data: hojeLocal(),
+        resultado: "Sem venda",
+        odometro: "",
+        observacao: "",
+      });
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível registrar a visita.");
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -75,8 +95,11 @@ export default function VisitasPage() {
           <p className="eyebrow">ROTINA DE CAMPO</p>
           <h1>Visitas</h1>
           <p>Registre cada atendimento e mantenha o histórico comercial organizado.</p>
+          <span className="tag">{bancoRemotoAtivo ? "Banco online" : "Modo local"}</span>
         </div>
       </header>
+
+      {erro && <div className="emptyState">{erro}</div>}
 
       <div className="grid visitsGrid">
         <form className="panel visit" onSubmit={registrarVisita}>
@@ -140,8 +163,8 @@ export default function VisitasPage() {
             />
           </label>
 
-          <button className="primary wide" type="submit">
-            <ClipboardCheck size={18} /> Registrar visita
+          <button className="primary wide" type="submit" disabled={salvando}>
+            <ClipboardCheck size={18} /> {salvando ? "Registrando..." : "Registrar visita"}
           </button>
         </form>
 
