@@ -3,35 +3,53 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
-import {
-  bancoRemotoAtivo,
-  Cliente,
-  carregarClientes,
-  clientesIniciais,
-  criarCliente,
-} from "../lib/data";
+import { Cliente, carregarClientes, criarCliente } from "../lib/data";
+import { carregarPerfilAtual } from "../lib/perfil";
 
 const formInicial = {
   nome: "",
   cidade: "",
   bairro: "",
-  representada: "King Ouro",
+  representada: "",
   telefone: "",
   status: "Ativo",
 };
 
 export default function ClientesPage() {
-  const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [representadas, setRepresentadas] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(formInicial);
   const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    void carregarClientes()
-      .then(setClientes)
-      .catch((falha: Error) => setErro(falha.message));
+    let ativo = true;
+
+    void Promise.all([carregarClientes(), carregarPerfilAtual()])
+      .then(([listaClientes, perfil]) => {
+        if (!ativo) return;
+        setClientes(listaClientes);
+        const listaRepresentadas = perfil?.representadas ?? [];
+        setRepresentadas(listaRepresentadas);
+        setForm((atual) => ({
+          ...atual,
+          representada: atual.representada || listaRepresentadas[0] || "Não informada",
+        }));
+      })
+      .catch((falha: Error) => {
+        if (!ativo) return;
+        setErro(falha.message);
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   const clientesFiltrados = useMemo(() => {
@@ -39,13 +57,7 @@ export default function ClientesPage() {
     if (!termo) return clientes;
 
     return clientes.filter((cliente) =>
-      [
-        cliente.nome,
-        cliente.cidade,
-        cliente.bairro,
-        cliente.representada,
-        cliente.telefone,
-      ]
+      [cliente.nome, cliente.cidade, cliente.bairro, cliente.representada, cliente.telefone]
         .join(" ")
         .toLowerCase()
         .includes(termo),
@@ -57,7 +69,7 @@ export default function ClientesPage() {
     if (!form.nome.trim() || salvando) return;
 
     const novoCliente: Cliente = {
-      id: `cliente-${Date.now()}`,
+      id: `cliente-${crypto.randomUUID()}`,
       nome: form.nome.trim(),
       cidade: form.cidade.trim(),
       bairro: form.bairro.trim(),
@@ -71,11 +83,11 @@ export default function ClientesPage() {
 
     try {
       const clienteSalvo = await criarCliente(novoCliente);
-      setClientes((lista) => [
-        clienteSalvo,
-        ...lista.filter((cliente) => cliente.id !== clienteSalvo.id),
-      ]);
-      setForm(formInicial);
+      setClientes((lista) => [clienteSalvo, ...lista]);
+      setForm({
+        ...formInicial,
+        representada: representadas[0] || "Não informada",
+      });
       setMostrarForm(false);
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível salvar o cliente.");
@@ -91,7 +103,7 @@ export default function ClientesPage() {
           <p className="eyebrow">CARTEIRA COMERCIAL</p>
           <h1>Clientes</h1>
           <p>Cadastre, localize e acompanhe sua carteira de clientes.</p>
-          <span className="tag">{bancoRemotoAtivo ? "Banco online" : "Modo local"}</span>
+          <span className="tag">Banco online</span>
         </div>
         <button className="primary" onClick={() => setMostrarForm((valor) => !valor)}>
           {mostrarForm ? <X size={18} /> : <Plus size={18} />}
@@ -143,9 +155,13 @@ export default function ClientesPage() {
                 value={form.representada}
                 onChange={(event) => setForm({ ...form, representada: event.target.value })}
               >
-                <option>King Ouro</option>
-                <option>Argamil</option>
-                <option>Outra</option>
+                {representadas.length > 0 ? (
+                  representadas.map((representada) => (
+                    <option key={representada} value={representada}>{representada}</option>
+                  ))
+                ) : (
+                  <option>Não informada</option>
+                )}
               </select>
             </label>
             <label className="field">
@@ -194,12 +210,12 @@ export default function ClientesPage() {
         <div className="panelTitle">
           <div>
             <p className="eyebrow">CARTEIRA</p>
-            <h2>{clientesFiltrados.length} clientes encontrados</h2>
+            <h2>{carregando ? "Carregando clientes..." : `${clientesFiltrados.length} clientes encontrados`}</h2>
           </div>
         </div>
 
         <div className="clientList">
-          {clientesFiltrados.map((cliente, indice) => (
+          {!carregando && clientesFiltrados.map((cliente, indice) => (
             <div className="client clientDetailed" key={cliente.id}>
               <div className="avatar">{cliente.nome.slice(0, 1).toUpperCase()}</div>
               <div className="clientInfo">
@@ -216,8 +232,8 @@ export default function ClientesPage() {
             </div>
           ))}
 
-          {clientesFiltrados.length === 0 && (
-            <div className="emptyState">Nenhum cliente encontrado com esse filtro.</div>
+          {!carregando && clientesFiltrados.length === 0 && (
+            <div className="emptyState">Nenhum cliente cadastrado ainda.</div>
           )}
         </div>
       </section>
