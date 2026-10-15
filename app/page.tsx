@@ -4,13 +4,7 @@ import Link from "next/link";
 import { ChevronRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "./components/AppShell";
-import {
-  Cliente,
-  Visita,
-  carregarClientes,
-  carregarVisitas,
-  clientesIniciais,
-} from "./lib/data";
+import { Cliente, Visita, carregarClientes, carregarVisitas } from "./lib/data";
 import { carregarPerfilAtual } from "./lib/perfil";
 
 function saudacaoAtual() {
@@ -21,10 +15,11 @@ function saudacaoAtual() {
 }
 
 export default function HomePage() {
-  const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [visitas, setVisitas] = useState<Visita[]>([]);
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [representadasCadastradas, setRepresentadasCadastradas] = useState<string[]>([]);
 
@@ -42,6 +37,9 @@ export default function HomePage() {
       .catch((falha: Error) => {
         if (!ativo) return;
         setErro(falha.message);
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
       });
 
     return () => {
@@ -63,7 +61,7 @@ export default function HomePage() {
       .slice(0, 5);
   }, [busca, clientes]);
 
-  const representadas = representadasCadastradas.length || new Set(clientes.map((cliente) => cliente.representada)).size;
+  const representadas = representadasCadastradas.length;
   const tituloSaudacao = nomeUsuario ? `${saudacaoAtual()}, ${nomeUsuario}.` : `${saudacaoAtual()}.`;
 
   return (
@@ -93,23 +91,23 @@ export default function HomePage() {
       <section className="stats">
         <article>
           <span>Clientes cadastrados</span>
-          <strong>{clientes.length}</strong>
-          <small>Carteira atual</small>
+          <strong>{carregando ? "—" : clientes.length}</strong>
+          <small>Carteira salva no banco</small>
         </article>
         <article>
           <span>Visitas registradas</span>
-          <strong>{visitas.length}</strong>
+          <strong>{carregando ? "—" : visitas.length}</strong>
           <small>Histórico do usuário</small>
         </article>
         <article>
           <span>Representadas</span>
-          <strong>{representadas}</strong>
-          <small>Marcas cadastradas</small>
+          <strong>{carregando ? "—" : representadas}</strong>
+          <small>Definidas no primeiro acesso</small>
         </article>
         <article>
           <span>Próxima ação</span>
-          <strong>Visita</strong>
-          <small>Registre o próximo atendimento</small>
+          <strong>{clientes.length > 0 ? "Visita" : "Cliente"}</strong>
+          <small>{clientes.length > 0 ? "Registre o próximo atendimento" : "Cadastre o primeiro cliente"}</small>
         </article>
       </section>
 
@@ -124,7 +122,7 @@ export default function HomePage() {
           </div>
 
           <div className="clientList">
-            {clientesFiltrados.map((cliente, indice) => (
+            {!carregando && clientesFiltrados.map((cliente, indice) => (
               <Link className="client clientLink" href="/clientes" key={cliente.id}>
                 <div className="avatar">{cliente.nome.slice(0, 1).toUpperCase()}</div>
                 <div className="clientInfo">
@@ -141,8 +139,10 @@ export default function HomePage() {
               </Link>
             ))}
 
-            {clientesFiltrados.length === 0 && (
-              <div className="emptyState">Nenhum cliente encontrado.</div>
+            {!carregando && clientesFiltrados.length === 0 && (
+              <div className="emptyState">
+                Nenhum cliente cadastrado ainda. Use “Novo cliente” para começar sua carteira.
+              </div>
             )}
           </div>
         </section>
@@ -151,9 +151,11 @@ export default function HomePage() {
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Nova visita</h2>
           <p>
-            Registre cliente, data, odômetro, resultado e observações. O histórico fica salvo e aparece na tela de visitas.
+            Registre cliente, data, odômetro, resultado e observações. O histórico fica salvo no Supabase e vinculado ao seu usuário.
           </p>
-          <Link className="primary wide" href="/visitas">Registrar visita</Link>
+          <Link className="primary wide" href={clientes.length > 0 ? "/visitas" : "/clientes"}>
+            {clientes.length > 0 ? "Registrar visita" : "Cadastrar primeiro cliente"}
+          </Link>
         </section>
       </div>
     </AppShell>
