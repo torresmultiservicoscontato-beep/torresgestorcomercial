@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { type PerfilComercial, sincronizarPerfilDoUsuario } from "../lib/perfil";
 import { supabase } from "../lib/supabase";
 
 const menu = [
@@ -32,6 +33,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     "verificando" | "autenticado" | "sem-acesso"
   >("verificando");
   const [email, setEmail] = useState("");
+  const [perfil, setPerfil] = useState<PerfilComercial | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -42,31 +44,35 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
     let ativo = true;
 
-    void supabase.auth.getSession().then(({ data }) => {
+    async function autenticar(session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) {
       if (!ativo) return;
 
-      if (data.session?.user) {
-        setEmail(data.session.user.email ?? "Usuário autenticado");
-        setEstadoAcesso("autenticado");
-      } else {
+      if (!session?.user) {
+        setEmail("");
+        setPerfil(null);
         setEstadoAcesso("sem-acesso");
         router.replace("/login");
+        return;
       }
-    });
+
+      setEmail(session.user.email ?? "Usuário autenticado");
+
+      try {
+        const perfilAtual = await sincronizarPerfilDoUsuario();
+        if (ativo) setPerfil(perfilAtual);
+      } catch {
+        if (ativo) setPerfil(null);
+      }
+
+      if (ativo) setEstadoAcesso("autenticado");
+    }
+
+    void supabase.auth.getSession().then(({ data }) => autenticar(data.session));
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_evento, session) => {
-      if (!ativo) return;
-
-      if (session?.user) {
-        setEmail(session.user.email ?? "Usuário autenticado");
-        setEstadoAcesso("autenticado");
-      } else {
-        setEmail("");
-        setEstadoAcesso("sem-acesso");
-        router.replace("/login");
-      }
+      void autenticar(session);
     });
 
     return () => {
@@ -127,7 +133,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <div className="company">
           <small>EMPRESA ATIVA</small>
-          <strong>Torres Multi Representações</strong>
+          <strong>{perfil?.nomeRepresentacao ?? "Perfil comercial a completar"}</strong>
+          {perfil?.nome && <span>{perfil.nome}</span>}
           <span className="userEmail">{email}</span>
           <button className="logoutButton" type="button" onClick={sair}>
             <LogOut size={16} />
