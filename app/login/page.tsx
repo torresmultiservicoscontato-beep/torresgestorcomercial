@@ -5,9 +5,11 @@ import { LockKeyhole, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
+type ModoAcesso = "entrar" | "cadastrar" | "recuperar";
+
 export default function LoginPage() {
   const router = useRouter();
-  const [modo, setModo] = useState<"entrar" | "cadastrar">("entrar");
+  const [modo, setModo] = useState<ModoAcesso>("entrar");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -31,6 +33,19 @@ export default function LoginPage() {
     setMensagem("");
 
     try {
+      if (modo === "recuperar") {
+        const redirectTo = `${window.location.origin}/redefinir-senha`;
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo,
+        });
+
+        if (error) throw error;
+        setMensagem(
+          "Se esse e-mail estiver cadastrado, você receberá um link para definir uma nova senha.",
+        );
+        return;
+      }
+
       if (modo === "entrar") {
         const { error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -66,6 +81,20 @@ export default function LoginPage() {
     }
   }
 
+  const titulo =
+    modo === "entrar"
+      ? "Entrar no sistema"
+      : modo === "cadastrar"
+        ? "Criar meu acesso"
+        : "Recuperar minha senha";
+
+  const descricao =
+    modo === "entrar"
+      ? "Use seu e-mail e senha para acessar seus clientes e visitas."
+      : modo === "cadastrar"
+        ? "Crie seu usuário para que os dados fiquem vinculados à sua conta."
+        : "Informe seu e-mail. Enviaremos um link seguro para você criar uma nova senha.";
+
   return (
     <main className="loginPage">
       <section className="loginCard">
@@ -79,12 +108,8 @@ export default function LoginPage() {
 
         <div className="loginIntro">
           <p className="eyebrow">ACESSO SEGURO</p>
-          <h1>{modo === "entrar" ? "Entrar no sistema" : "Criar meu acesso"}</h1>
-          <p>
-            {modo === "entrar"
-              ? "Use seu e-mail e senha para acessar seus clientes e visitas."
-              : "Crie seu usuário para que os dados fiquem vinculados à sua conta."}
-          </p>
+          <h1>{titulo}</h1>
+          <p>{descricao}</p>
         </div>
 
         {erro && <div className="loginAlert error">{erro}</div>}
@@ -106,42 +131,74 @@ export default function LoginPage() {
             </div>
           </label>
 
-          <label className="field">
-            Senha
-            <div className="loginInput">
-              <LockKeyhole size={18} />
-              <input
-                type="password"
-                autoComplete={modo === "entrar" ? "current-password" : "new-password"}
-                required
-                minLength={6}
-                value={senha}
-                onChange={(event) => setSenha(event.target.value)}
-                placeholder="Mínimo de 6 caracteres"
-              />
-            </div>
-          </label>
+          {modo !== "recuperar" && (
+            <label className="field">
+              Senha
+              <div className="loginInput">
+                <LockKeyhole size={18} />
+                <input
+                  type="password"
+                  autoComplete={modo === "entrar" ? "current-password" : "new-password"}
+                  required
+                  minLength={6}
+                  value={senha}
+                  onChange={(event) => setSenha(event.target.value)}
+                  placeholder="Mínimo de 6 caracteres"
+                />
+              </div>
+            </label>
+          )}
+
+          {modo === "entrar" && (
+            <button
+              className="forgotPassword"
+              type="button"
+              onClick={() => {
+                setModo("recuperar");
+                setErro("");
+                setMensagem("");
+              }}
+            >
+              Esqueceu a senha?
+            </button>
+          )}
 
           <button className="primary wide" type="submit" disabled={carregando}>
             {carregando
               ? "Aguarde..."
               : modo === "entrar"
                 ? "Entrar"
-                : "Criar acesso"}
+                : modo === "cadastrar"
+                  ? "Criar acesso"
+                  : "Enviar link de recuperação"}
           </button>
         </form>
 
-        <button
-          className="loginSwitch"
-          type="button"
-          onClick={() => {
-            setModo((atual) => (atual === "entrar" ? "cadastrar" : "entrar"));
-            setErro("");
-            setMensagem("");
-          }}
-        >
-          {modo === "entrar" ? "Primeiro acesso? Criar conta" : "Já tenho acesso? Entrar"}
-        </button>
+        {modo === "recuperar" ? (
+          <button
+            className="loginSwitch"
+            type="button"
+            onClick={() => {
+              setModo("entrar");
+              setErro("");
+              setMensagem("");
+            }}
+          >
+            Voltar para o login
+          </button>
+        ) : (
+          <button
+            className="loginSwitch"
+            type="button"
+            onClick={() => {
+              setModo((atual) => (atual === "entrar" ? "cadastrar" : "entrar"));
+              setErro("");
+              setMensagem("");
+            }}
+          >
+            {modo === "entrar" ? "Primeiro acesso? Criar conta" : "Já tenho acesso? Entrar"}
+          </button>
+        )}
       </section>
     </main>
   );
