@@ -22,8 +22,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (!supabase) return;
 
-    void supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) return;
+    void supabase.auth.getUser().then(async ({ data, error }) => {
+      if (error || !data.user) {
+        await supabase.auth.signOut();
+        return;
+      }
+
       const perfil = await carregarPerfilAtual().catch(() => null);
       redirecionar(perfil ? "/" : "/primeiro-acesso");
     });
