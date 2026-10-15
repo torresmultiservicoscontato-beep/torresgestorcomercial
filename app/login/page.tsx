@@ -2,14 +2,16 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { LockKeyhole, Mail } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { carregarPerfilAtual } from "../lib/perfil";
 import { supabase } from "../lib/supabase";
 
 type ModoAcesso = "entrar" | "cadastrar" | "recuperar";
 
+function redirecionar(destino: string) {
+  window.location.replace(destino);
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [modo, setModo] = useState<ModoAcesso>("entrar");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -23,9 +25,9 @@ export default function LoginPage() {
     void supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session) return;
       const perfil = await carregarPerfilAtual().catch(() => null);
-      router.replace(perfil ? "/" : "/primeiro-acesso");
+      redirecionar(perfil ? "/" : "/primeiro-acesso");
     });
-  }, [router]);
+  }, []);
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,8 +59,7 @@ export default function LoginPage() {
 
         if (error) throw error;
         const perfil = await carregarPerfilAtual().catch(() => null);
-        router.replace(perfil ? "/" : "/primeiro-acesso");
-        router.refresh();
+        redirecionar(perfil ? "/" : "/primeiro-acesso");
         return;
       }
 
@@ -73,14 +74,14 @@ export default function LoginPage() {
       if (error) throw error;
 
       if (data.session) {
-        router.replace("/primeiro-acesso");
-        router.refresh();
-      } else {
-        setMensagem(
-          "Acesso criado. Confirme o e-mail recebido e depois entre para completar seu primeiro acesso.",
-        );
-        setModo("entrar");
+        redirecionar("/primeiro-acesso");
+        return;
       }
+
+      setMensagem(
+        "Acesso criado. Confirme o e-mail recebido e depois entre para completar seu primeiro acesso.",
+      );
+      setModo("entrar");
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível concluir o acesso.");
     } finally {
