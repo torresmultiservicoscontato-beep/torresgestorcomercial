@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 
+export type PapelUsuario = "usuario" | "admin";
+
 export type PerfilComercial = {
   userId: string;
   nome: string;
@@ -15,6 +17,7 @@ export type PerfilComercial = {
   cidade: string;
   uf: string;
   representadas: string[];
+  papel: PapelUsuario;
 };
 
 type PerfilRow = {
@@ -31,6 +34,7 @@ type PerfilRow = {
   bairro: string;
   cidade: string;
   uf: string;
+  papel: PapelUsuario;
 };
 
 async function buscarPerfil(userId: string): Promise<PerfilComercial | null> {
@@ -41,7 +45,7 @@ async function buscarPerfil(userId: string): Promise<PerfilComercial | null> {
       supabase
         .from("perfis")
         .select(
-          "user_id,nome,nome_representacao,documento_tipo,documento,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf",
+          "user_id,nome,nome_representacao,documento_tipo,documento,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf,papel",
         )
         .eq("user_id", userId)
         .maybeSingle(),
@@ -74,6 +78,7 @@ async function buscarPerfil(userId: string): Promise<PerfilComercial | null> {
     cidade: row.cidade,
     uf: row.uf,
     representadas: (representadas ?? []).map((item) => item.nome),
+    papel: row.papel ?? "usuario",
   };
 }
 
@@ -89,7 +94,9 @@ export async function carregarPerfilAtual(): Promise<PerfilComercial | null> {
   return buscarPerfil(user.id);
 }
 
-export async function salvarPerfilAtual(perfil: Omit<PerfilComercial, "userId">): Promise<PerfilComercial> {
+export async function salvarPerfilAtual(
+  perfil: Omit<PerfilComercial, "userId" | "papel">,
+): Promise<PerfilComercial> {
   if (!supabase) throw new Error("Supabase não configurado.");
 
   const {
