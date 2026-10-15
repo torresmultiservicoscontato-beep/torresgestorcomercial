@@ -59,12 +59,23 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       try {
         const perfilAtual = await sincronizarPerfilDoUsuario();
-        if (ativo) setPerfil(perfilAtual);
-      } catch {
-        if (ativo) setPerfil(null);
-      }
+        if (!ativo) return;
 
-      if (ativo) setEstadoAcesso("autenticado");
+        if (!perfilAtual) {
+          setPerfil(null);
+          setEstadoAcesso("verificando");
+          router.replace("/primeiro-acesso");
+          return;
+        }
+
+        setPerfil(perfilAtual);
+        setEstadoAcesso("autenticado");
+      } catch {
+        if (!ativo) return;
+        setPerfil(null);
+        setEstadoAcesso("verificando");
+        router.replace("/primeiro-acesso");
+      }
     }
 
     void supabase.auth.getSession().then(({ data }) => autenticar(data.session));
@@ -133,7 +144,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <div className="company">
           <small>EMPRESA ATIVA</small>
-          <strong>{perfil?.nomeRepresentacao ?? "Perfil comercial a completar"}</strong>
+          <strong>{perfil?.nomeRepresentacao}</strong>
           {perfil?.nome && <span>{perfil.nome}</span>}
           <span className="userEmail">{email}</span>
           <button className="logoutButton" type="button" onClick={sair}>
