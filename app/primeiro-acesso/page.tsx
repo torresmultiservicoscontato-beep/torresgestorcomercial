@@ -62,8 +62,9 @@ export default function PrimeiroAcessoPage() {
       return;
     }
 
-    void supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) {
+    void supabase.auth.getUser().then(async ({ data, error }) => {
+      if (error || !data.user) {
+        await supabase.auth.signOut();
         router.replace("/login");
         return;
       }
