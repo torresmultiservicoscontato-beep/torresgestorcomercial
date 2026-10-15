@@ -9,6 +9,8 @@ import {
   Home,
   LogOut,
   MapPinned,
+  Settings,
+  ShieldCheck,
   ShoppingCart,
   Users,
 } from "lucide-react";
@@ -16,7 +18,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { type PerfilComercial, sincronizarPerfilDoUsuario } from "../lib/perfil";
 import { supabase } from "../lib/supabase";
 
-const menu = [
+const menuBase = [
   { label: "Início", href: "/", icon: Home, enabled: true },
   { label: "Clientes", href: "/clientes", icon: Users, enabled: true },
   { label: "Rotas", href: "#", icon: MapPinned, enabled: false },
@@ -24,6 +26,7 @@ const menu = [
   { label: "Vendas", href: "#", icon: ShoppingCart, enabled: false },
   { label: "Agenda", href: "#", icon: CalendarDays, enabled: false },
   { label: "Relatórios", href: "#", icon: BarChart3, enabled: false },
+  { label: "Configurações", href: "/configuracoes", icon: Settings, enabled: true },
 ];
 
 function redirecionar(destino: string) {
@@ -110,6 +113,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  const menu = perfil?.papel === "admin"
+    ? [
+        ...menuBase,
+        { label: "Admin", href: "/admin", icon: ShieldCheck, enabled: true },
+      ]
+    : menuBase;
+
   return (
     <main className="shell">
       <aside className="sidebar">
@@ -149,6 +159,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <small>EMPRESA ATIVA</small>
           <strong>{perfil?.nomeRepresentacao}</strong>
           {perfil?.nome && <span>{perfil.nome}</span>}
+          {perfil?.papel === "admin" && <span className="adminRole">Administrador</span>}
           <span className="userEmail">{email}</span>
           <button className="logoutButton" type="button" onClick={sair}>
             <LogOut size={16} />
