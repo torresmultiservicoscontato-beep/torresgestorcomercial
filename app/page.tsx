@@ -11,21 +11,33 @@ import {
   carregarVisitas,
   clientesIniciais,
 } from "./lib/data";
+import { carregarPerfilAtual } from "./lib/perfil";
+
+function saudacaoAtual() {
+  const hora = new Date().getHours();
+  if (hora < 12) return "Bom dia";
+  if (hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
 
 export default function HomePage() {
   const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
   const [visitas, setVisitas] = useState<Visita[]>([]);
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
+  const [nomeUsuario, setNomeUsuario] = useState("");
+  const [representadasCadastradas, setRepresentadasCadastradas] = useState<string[]>([]);
 
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarVisitas()])
-      .then(([listaClientes, listaVisitas]) => {
+    void Promise.all([carregarClientes(), carregarVisitas(), carregarPerfilAtual()])
+      .then(([listaClientes, listaVisitas, perfil]) => {
         if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
+        setNomeUsuario(perfil?.nome.split(/\s+/)[0] ?? "");
+        setRepresentadasCadastradas(perfil?.representadas ?? []);
       })
       .catch((falha: Error) => {
         if (!ativo) return;
@@ -51,14 +63,15 @@ export default function HomePage() {
       .slice(0, 5);
   }, [busca, clientes]);
 
-  const representadas = new Set(clientes.map((cliente) => cliente.representada)).size;
+  const representadas = representadasCadastradas.length || new Set(clientes.map((cliente) => cliente.representada)).size;
+  const tituloSaudacao = nomeUsuario ? `${saudacaoAtual()}, ${nomeUsuario}.` : `${saudacaoAtual()}.`;
 
   return (
     <AppShell>
       <header>
         <div>
           <p className="eyebrow">PAINEL COMERCIAL</p>
-          <h1>Boa noite, Torres.</h1>
+          <h1>{tituloSaudacao}</h1>
           <p>Seu dia comercial em um só lugar.</p>
         </div>
         <div className="actions">
@@ -91,7 +104,7 @@ export default function HomePage() {
         <article>
           <span>Representadas</span>
           <strong>{representadas}</strong>
-          <small>Marcas na carteira</small>
+          <small>Marcas cadastradas</small>
         </article>
         <article>
           <span>Próxima ação</span>
