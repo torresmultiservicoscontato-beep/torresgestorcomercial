@@ -16,10 +16,25 @@ export default function HomePage() {
   const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
   const [visitas, setVisitas] = useState<Visita[]>([]);
   const [busca, setBusca] = useState("");
+  const [erro, setErro] = useState("");
 
   useEffect(() => {
-    setClientes(carregarClientes());
-    setVisitas(carregarVisitas());
+    let ativo = true;
+
+    void Promise.all([carregarClientes(), carregarVisitas()])
+      .then(([listaClientes, listaVisitas]) => {
+        if (!ativo) return;
+        setClientes(listaClientes);
+        setVisitas(listaVisitas);
+      })
+      .catch((falha: Error) => {
+        if (!ativo) return;
+        setErro(falha.message);
+      });
+
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   const clientesFiltrados = useMemo(() => {
@@ -51,6 +66,8 @@ export default function HomePage() {
         </div>
       </header>
 
+      {erro && <div className="emptyState">{erro}</div>}
+
       <div className="search">
         <Search size={19} />
         <input
@@ -64,12 +81,12 @@ export default function HomePage() {
         <article>
           <span>Clientes cadastrados</span>
           <strong>{clientes.length}</strong>
-          <small>Carteira local atual</small>
+          <small>Carteira atual</small>
         </article>
         <article>
           <span>Visitas registradas</span>
           <strong>{visitas.length}</strong>
-          <small>Histórico salvo neste navegador</small>
+          <small>Histórico do usuário</small>
         </article>
         <article>
           <span>Representadas</span>
