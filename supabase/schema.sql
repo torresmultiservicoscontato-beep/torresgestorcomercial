@@ -35,6 +35,7 @@ create index if not exists clientes_user_id_idx on public.clientes(user_id);
 create index if not exists clientes_nome_idx on public.clientes(nome);
 create index if not exists visitas_user_id_idx on public.visitas(user_id);
 create index if not exists visitas_cliente_id_idx on public.visitas(cliente_id);
+create index if not exists visitas_cliente_usuario_idx on public.visitas(cliente_id, user_id);
 create index if not exists visitas_data_idx on public.visitas(data desc);
 
 alter table public.clientes enable row level security;
