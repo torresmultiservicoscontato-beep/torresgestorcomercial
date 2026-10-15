@@ -30,73 +30,34 @@ type VisitaRow = {
   observacao: string;
 };
 
-export const CLIENTES_KEY = "torres-gestor-clientes";
-export const VISITAS_KEY = "torres-gestor-visitas";
 export const bancoRemotoAtivo = supabaseConfigured;
 
-export const clientesIniciais: Cliente[] = [
-  {
-    id: "vale-mc",
-    nome: "Vale Materiais de Construção",
-    cidade: "Guapimirim",
-    bairro: "Curral de Zinco",
-    representada: "King Ouro",
-    telefone: "",
-    status: "Visitar hoje",
-  },
-  {
-    id: "pires-mc",
-    nome: "Pires Materiais de Construção",
-    cidade: "Magé",
-    bairro: "Mauá",
-    representada: "Argamil",
-    telefone: "",
-    status: "Em dia",
-  },
-  {
-    id: "vila-olimpia-mc",
-    nome: "Vila Olímpia MC",
-    cidade: "Guapimirim",
-    bairro: "Vila Olímpia",
-    representada: "King Ouro",
-    telefone: "",
-    status: "Próxima visita",
-  },
-];
-
-function carregarClientesLocal(): Cliente[] {
-  if (typeof window === "undefined") return clientesIniciais;
-
-  const salvo = window.localStorage.getItem(CLIENTES_KEY);
-  if (!salvo) {
-    window.localStorage.setItem(CLIENTES_KEY, JSON.stringify(clientesIniciais));
-    return clientesIniciais;
+function exigirSupabase() {
+  if (!supabase) {
+    throw new Error("Banco de dados não configurado.");
   }
 
-  try {
-    return JSON.parse(salvo) as Cliente[];
-  } catch {
-    return clientesIniciais;
-  }
+  return supabase;
 }
 
-function carregarVisitasLocal(): Visita[] {
-  if (typeof window === "undefined") return [];
+async function exigirUsuario() {
+  const cliente = exigirSupabase();
+  const {
+    data: { user },
+    error,
+  } = await cliente.auth.getUser();
 
-  const salvo = window.localStorage.getItem(VISITAS_KEY);
-  if (!salvo) return [];
-
-  try {
-    return JSON.parse(salvo) as Visita[];
-  } catch {
-    return [];
+  if (error || !user) {
+    throw new Error("Sua sessão expirou. Entre novamente no sistema.");
   }
+
+  return { cliente, user };
 }
 
 export async function carregarClientes(): Promise<Cliente[]> {
-  if (!supabase) return carregarClientesLocal();
+  const { cliente } = await exigirUsuario();
 
-  const { data, error } = await supabase
+  const { data, error } = await cliente
     .from("clientes")
     .select("id,nome,cidade,bairro,representada,telefone,status")
     .order("created_at", { ascending: false });
@@ -105,24 +66,20 @@ export async function carregarClientes(): Promise<Cliente[]> {
   return (data ?? []) as Cliente[];
 }
 
-export async function criarCliente(cliente: Cliente): Promise<Cliente> {
-  if (!supabase) {
-    const clientes = carregarClientesLocal();
-    const novaLista = [cliente, ...clientes.filter((item) => item.id !== cliente.id)];
-    window.localStorage.setItem(CLIENTES_KEY, JSON.stringify(novaLista));
-    return cliente;
-  }
+export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
+  const { cliente, user } = await exigirUsuario();
 
-  const { data, error } = await supabase
+  const { data, error } = await cliente
     .from("clientes")
     .insert({
-      id: cliente.id,
-      nome: cliente.nome,
-      cidade: cliente.cidade,
-      bairro: cliente.bairro,
-      representada: cliente.representada,
-      telefone: cliente.telefone,
-      status: cliente.status,
+      id: novoCliente.id,
+      user_id: user.id,
+      nome: novoCliente.nome,
+      cidade: novoCliente.cidade,
+      bairro: novoCliente.bairro,
+      representada: novoCliente.representada,
+      telefone: novoCliente.telefone,
+      status: novoCliente.status,
     })
     .select("id,nome,cidade,bairro,representada,telefone,status")
     .single();
@@ -132,9 +89,9 @@ export async function criarCliente(cliente: Cliente): Promise<Cliente> {
 }
 
 export async function carregarVisitas(): Promise<Visita[]> {
-  if (!supabase) return carregarVisitasLocal();
+  const { cliente } = await exigirUsuario();
 
-  const { data, error } = await supabase
+  const { data, error } = await cliente
     .from("visitas")
     .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
     .order("data", { ascending: false })
@@ -153,24 +110,20 @@ export async function carregarVisitas(): Promise<Visita[]> {
   }));
 }
 
-export async function criarVisita(visita: Visita): Promise<Visita> {
-  if (!supabase) {
-    const visitas = carregarVisitasLocal();
-    const novaLista = [visita, ...visitas.filter((item) => item.id !== visita.id)];
-    window.localStorage.setItem(VISITAS_KEY, JSON.stringify(novaLista));
-    return visita;
-  }
+export async function criarVisita(novaVisita: Visita): Promise<Visita> {
+  const { cliente, user } = await exigirUsuario();
 
-  const { data, error } = await supabase
+  const { data, error } = await cliente
     .from("visitas")
     .insert({
-      id: visita.id,
-      cliente_id: visita.clienteId,
-      cliente_nome: visita.clienteNome,
-      data: visita.data,
-      resultado: visita.resultado,
-      odometro: visita.odometro,
-      observacao: visita.observacao,
+      id: novaVisita.id,
+      user_id: user.id,
+      cliente_id: novaVisita.clienteId,
+      cliente_nome: novaVisita.clienteNome,
+      data: novaVisita.data,
+      resultado: novaVisita.resultado,
+      odometro: novaVisita.odometro,
+      observacao: novaVisita.observacao,
     })
     .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
     .single();
