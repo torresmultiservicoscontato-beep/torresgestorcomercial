@@ -3,15 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 import AppShell from "../components/AppShell";
-import {
-  bancoRemotoAtivo,
-  Cliente,
-  Visita,
-  carregarClientes,
-  carregarVisitas,
-  clientesIniciais,
-  criarVisita,
-} from "../lib/data";
+import { Cliente, Visita, carregarClientes, carregarVisitas, criarVisita } from "../lib/data";
 
 function hojeLocal() {
   const agora = new Date();
@@ -22,9 +14,10 @@ function hojeLocal() {
 }
 
 export default function VisitasPage() {
-  const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [visitas, setVisitas] = useState<Visita[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [form, setForm] = useState({
     clienteId: "",
@@ -35,12 +28,25 @@ export default function VisitasPage() {
   });
 
   useEffect(() => {
+    let ativo = true;
+
     void Promise.all([carregarClientes(), carregarVisitas()])
       .then(([listaClientes, listaVisitas]) => {
+        if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
       })
-      .catch((falha: Error) => setErro(falha.message));
+      .catch((falha: Error) => {
+        if (!ativo) return;
+        setErro(falha.message);
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   const visitasOrdenadas = useMemo(
@@ -53,10 +59,13 @@ export default function VisitasPage() {
     if (salvando) return;
 
     const cliente = clientes.find((item) => item.id === form.clienteId);
-    if (!cliente) return;
+    if (!cliente) {
+      setErro("Selecione um cliente cadastrado antes de registrar a visita.");
+      return;
+    }
 
     const novaVisita: Visita = {
-      id: `visita-${Date.now()}`,
+      id: `visita-${crypto.randomUUID()}`,
       clienteId: cliente.id,
       clienteNome: cliente.nome,
       data: form.data,
@@ -70,10 +79,7 @@ export default function VisitasPage() {
 
     try {
       const visitaSalva = await criarVisita(novaVisita);
-      setVisitas((lista) => [
-        visitaSalva,
-        ...lista.filter((visita) => visita.id !== visitaSalva.id),
-      ]);
+      setVisitas((lista) => [visitaSalva, ...lista]);
       setForm({
         clienteId: "",
         data: hojeLocal(),
@@ -95,7 +101,7 @@ export default function VisitasPage() {
           <p className="eyebrow">ROTINA DE CAMPO</p>
           <h1>Visitas</h1>
           <p>Registre cada atendimento e mantenha o histórico comercial organizado.</p>
-          <span className="tag">{bancoRemotoAtivo ? "Banco online" : "Modo local"}</span>
+          <span className="tag">Banco online</span>
         </div>
       </header>
 
@@ -111,9 +117,16 @@ export default function VisitasPage() {
             <select
               required
               value={form.clienteId}
+              disabled={carregando || clientes.length === 0}
               onChange={(event) => setForm({ ...form, clienteId: event.target.value })}
             >
-              <option value="" disabled>Selecionar cliente</option>
+              <option value="" disabled>
+                {carregando
+                  ? "Carregando clientes..."
+                  : clientes.length === 0
+                    ? "Cadastre um cliente primeiro"
+                    : "Selecionar cliente"}
+              </option>
               {clientes.map((cliente) => (
                 <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>
               ))}
@@ -163,7 +176,7 @@ export default function VisitasPage() {
             />
           </label>
 
-          <button className="primary wide" type="submit" disabled={salvando}>
+          <button className="primary wide" type="submit" disabled={salvando || carregando || clientes.length === 0}>
             <ClipboardCheck size={18} /> {salvando ? "Registrando..." : "Registrar visita"}
           </button>
         </form>
@@ -172,12 +185,12 @@ export default function VisitasPage() {
           <div className="panelTitle">
             <div>
               <p className="eyebrow">HISTÓRICO</p>
-              <h2>{visitasOrdenadas.length} visitas registradas</h2>
+              <h2>{carregando ? "Carregando histórico..." : `${visitasOrdenadas.length} visitas registradas`}</h2>
             </div>
           </div>
 
           <div className="visitHistory">
-            {visitasOrdenadas.map((visita) => (
+            {!carregando && visitasOrdenadas.map((visita) => (
               <article className="visitItem" key={visita.id}>
                 <div>
                   <strong>{visita.clienteNome}</strong>
@@ -189,7 +202,7 @@ export default function VisitasPage() {
               </article>
             ))}
 
-            {visitasOrdenadas.length === 0 && (
+            {!carregando && visitasOrdenadas.length === 0 && (
               <div className="emptyState">Ainda não há visitas registradas.</div>
             )}
           </div>
