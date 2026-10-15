@@ -4,10 +4,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import {
+  bancoRemotoAtivo,
   Cliente,
   carregarClientes,
   clientesIniciais,
-  salvarClientes,
+  criarCliente,
 } from "../lib/data";
 
 const formInicial = {
@@ -24,9 +25,13 @@ export default function ClientesPage() {
   const [busca, setBusca] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(formInicial);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
 
   useEffect(() => {
-    setClientes(carregarClientes());
+    void carregarClientes()
+      .then(setClientes)
+      .catch((falha: Error) => setErro(falha.message));
   }, []);
 
   const clientesFiltrados = useMemo(() => {
@@ -47,9 +52,9 @@ export default function ClientesPage() {
     );
   }, [busca, clientes]);
 
-  function cadastrarCliente(event: FormEvent<HTMLFormElement>) {
+  async function cadastrarCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.nome.trim()) return;
+    if (!form.nome.trim() || salvando) return;
 
     const novoCliente: Cliente = {
       id: `cliente-${Date.now()}`,
@@ -61,11 +66,22 @@ export default function ClientesPage() {
       status: form.status,
     };
 
-    const novaLista = [novoCliente, ...clientes];
-    setClientes(novaLista);
-    salvarClientes(novaLista);
-    setForm(formInicial);
-    setMostrarForm(false);
+    setSalvando(true);
+    setErro("");
+
+    try {
+      const clienteSalvo = await criarCliente(novoCliente);
+      setClientes((lista) => [
+        clienteSalvo,
+        ...lista.filter((cliente) => cliente.id !== clienteSalvo.id),
+      ]);
+      setForm(formInicial);
+      setMostrarForm(false);
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível salvar o cliente.");
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -75,12 +91,15 @@ export default function ClientesPage() {
           <p className="eyebrow">CARTEIRA COMERCIAL</p>
           <h1>Clientes</h1>
           <p>Cadastre, localize e acompanhe sua carteira de clientes.</p>
+          <span className="tag">{bancoRemotoAtivo ? "Banco online" : "Modo local"}</span>
         </div>
         <button className="primary" onClick={() => setMostrarForm((valor) => !valor)}>
           {mostrarForm ? <X size={18} /> : <Plus size={18} />}
           {mostrarForm ? "Fechar" : "Novo cliente"}
         </button>
       </header>
+
+      {erro && <div className="emptyState">{erro}</div>}
 
       {mostrarForm && (
         <form className="panel formPanel" onSubmit={cadastrarCliente}>
@@ -155,8 +174,8 @@ export default function ClientesPage() {
             <button className="secondary" type="button" onClick={() => setMostrarForm(false)}>
               Cancelar
             </button>
-            <button className="primary" type="submit">
-              Salvar cliente
+            <button className="primary" type="submit" disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar cliente"}
             </button>
           </div>
         </form>
