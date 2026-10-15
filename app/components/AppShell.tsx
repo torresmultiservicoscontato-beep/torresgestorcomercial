@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarDays,
@@ -26,9 +26,12 @@ const menu = [
   { label: "Relatórios", href: "#", icon: BarChart3, enabled: false },
 ];
 
+function redirecionar(destino: string) {
+  window.location.replace(destino);
+}
+
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [estadoAcesso, setEstadoAcesso] = useState<
     "verificando" | "autenticado" | "sem-acesso"
   >("verificando");
@@ -38,7 +41,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!supabase) {
       setEstadoAcesso("sem-acesso");
-      router.replace("/login");
+      redirecionar("/login");
       return;
     }
 
@@ -51,7 +54,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         setEmail("");
         setPerfil(null);
         setEstadoAcesso("sem-acesso");
-        router.replace("/login");
+        redirecionar("/login");
         return;
       }
 
@@ -64,7 +67,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         if (!perfilAtual) {
           setPerfil(null);
           setEstadoAcesso("verificando");
-          router.replace("/primeiro-acesso");
+          redirecionar("/primeiro-acesso");
           return;
         }
 
@@ -74,7 +77,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         if (!ativo) return;
         setPerfil(null);
         setEstadoAcesso("verificando");
-        router.replace("/primeiro-acesso");
+        redirecionar("/primeiro-acesso");
       }
     }
 
@@ -90,12 +93,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
       ativo = false;
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
 
   async function sair() {
     if (!supabase) return;
     await supabase.auth.signOut();
-    router.replace("/login");
+    redirecionar("/login");
   }
 
   if (estadoAcesso !== "autenticado") {
