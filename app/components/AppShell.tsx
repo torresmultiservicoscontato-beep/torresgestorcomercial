@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   CalendarDays,
   ClipboardCheck,
   Home,
+  LogOut,
   MapPinned,
   ShoppingCart,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 const menu = [
   { label: "Início", href: "/", icon: Home, enabled: true },
@@ -25,6 +27,68 @@ const menu = [
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [estadoAcesso, setEstadoAcesso] = useState<
+    "verificando" | "autenticado" | "sem-acesso"
+  >("verificando");
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    if (!supabase) {
+      setEstadoAcesso("sem-acesso");
+      router.replace("/login");
+      return;
+    }
+
+    let ativo = true;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!ativo) return;
+
+      if (data.session?.user) {
+        setEmail(data.session.user.email ?? "Usuário autenticado");
+        setEstadoAcesso("autenticado");
+      } else {
+        setEstadoAcesso("sem-acesso");
+        router.replace("/login");
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_evento, session) => {
+      if (!ativo) return;
+
+      if (session?.user) {
+        setEmail(session.user.email ?? "Usuário autenticado");
+        setEstadoAcesso("autenticado");
+      } else {
+        setEmail("");
+        setEstadoAcesso("sem-acesso");
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      ativo = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
+  async function sair() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    router.replace("/login");
+  }
+
+  if (estadoAcesso !== "autenticado") {
+    return (
+      <main className="authLoading">
+        <div className="brandMark">T</div>
+        <strong>Verificando acesso...</strong>
+      </main>
+    );
+  }
 
   return (
     <main className="shell">
@@ -64,7 +128,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className="company">
           <small>EMPRESA ATIVA</small>
           <strong>Torres Multi Representações</strong>
-          <span>Administrador</span>
+          <span className="userEmail">{email}</span>
+          <button className="logoutButton" type="button" onClick={sair}>
+            <LogOut size={16} />
+            Sair
+          </button>
         </div>
       </aside>
 
