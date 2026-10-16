@@ -118,11 +118,11 @@ export async function carregarAcessoAtual(): Promise<AcessoSistema | null> {
   const vinculoAtivo = ativos.find((vinculo) => vinculo.id === operacaoAtiva.vinculoId);
   if (!vinculoAtivo) throw new Error("Vínculo operacional não encontrado.");
 
-  const { data: representadas } = await supabase
-    .from("perfil_representadas")
-    .select("nome")
-    .eq("user_id", operacaoAtiva.titularUserId)
-    .order("nome");
+  const { data: representadas, error: representadasError } = await supabase.rpc("listar_representadas_do_vinculo", {
+    p_vinculo_id: vinculoAtivo.id,
+  });
+
+  if (representadasError) throw new Error(`Falha ao carregar representadas do vínculo: ${representadasError.message}`);
 
   return {
     userId: user.id,
@@ -130,7 +130,7 @@ export async function carregarAcessoAtual(): Promise<AcessoSistema | null> {
     nome: vinculoAtivo.nome,
     nomeRepresentacao: operacaoAtiva.nomeRepresentacao,
     titularUserId: operacaoAtiva.titularUserId,
-    representadas: (representadas ?? []).map((item) => item.nome),
+    representadas: (representadas ?? []).map((item: { nome: string }) => item.nome),
     permissoes: vinculoAtivo.permissoes ?? {},
     operacoes,
     vinculoId: vinculoAtivo.id,
