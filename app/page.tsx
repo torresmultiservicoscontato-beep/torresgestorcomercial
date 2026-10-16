@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "./components/AppShell";
 import { carregarAcessoAtual } from "./lib/acesso";
 import { Cliente, Visita, carregarClientes, carregarVisitas } from "./lib/data";
+import { listarPrepostos } from "./lib/prepostos";
 
 function saudacaoAtual() {
   const hora = new Date().getHours();
@@ -22,25 +23,44 @@ export default function HomePage() {
   const [carregando, setCarregando] = useState(true);
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [representadasCadastradas, setRepresentadasCadastradas] = useState<string[]>([]);
+  const [quantidadePrepostos, setQuantidadePrepostos] = useState(0);
+  const [ehPreposto, setEhPreposto] = useState(false);
 
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarVisitas(), carregarAcessoAtual()])
-      .then(([listaClientes, listaVisitas, acesso]) => {
+    async function carregar() {
+      try {
+        const acesso = await carregarAcessoAtual();
+        if (!ativo || !acesso) return;
+
+        const [listaClientes, listaVisitas] = await Promise.all([
+          carregarClientes(),
+          carregarVisitas(),
+        ]);
+
+        let prepostos = 0;
+        if (acesso.papel !== "preposto") {
+          const listaPrepostos = await listarPrepostos();
+          prepostos = listaPrepostos.length;
+        }
+
         if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
-        setNomeUsuario(acesso?.nome.split(/\s+/)[0] ?? "");
-        setRepresentadasCadastradas(acesso?.representadas ?? []);
-      })
-      .catch((falha: Error) => {
+        setNomeUsuario(acesso.nome.split(/\s+/)[0] ?? "");
+        setRepresentadasCadastradas(acesso.representadas ?? []);
+        setQuantidadePrepostos(prepostos);
+        setEhPreposto(acesso.papel === "preposto");
+      } catch (falha) {
         if (!ativo) return;
-        setErro(falha.message);
-      })
-      .finally(() => {
+        setErro(falha instanceof Error ? falha.message : "Não foi possível carregar o painel.");
+      } finally {
         if (ativo) setCarregando(false);
-      });
+      }
+    }
+
+    void carregar();
 
     return () => {
       ativo = false;
@@ -53,7 +73,13 @@ export default function HomePage() {
 
     return clientes
       .filter((cliente) =>
-        [cliente.nome, cliente.cidade, cliente.bairro, cliente.representada]
+        [
+          cliente.nome,
+          cliente.cidade,
+          cliente.bairro,
+          cliente.representada,
+          cliente.responsavelNome,
+        ]
           .join(" ")
           .toLowerCase()
           .includes(termo),
@@ -84,7 +110,7 @@ export default function HomePage() {
         <input
           value={busca}
           onChange={(event) => setBusca(event.target.value)}
-          placeholder="Buscar cliente, cidade, bairro ou representada..."
+          placeholder="Buscar cliente, cidade, bairro, representada ou responsável..."
         />
       </div>
 
@@ -104,11 +130,21 @@ export default function HomePage() {
           <strong>{carregando ? "—" : representadas}</strong>
           <small>Marcas da conta titular</small>
         </article>
-        <article>
-          <span>Próxima ação</span>
-          <strong>{clientes.length > 0 ? "Visita" : "Cliente"}</strong>
-          <small>{clientes.length > 0 ? "Registre o próximo atendimento" : "Cadastre o primeiro cliente"}</small>
-        </article>
+        {!ehPreposto && (
+          <article>
+            <UsersRound size={20} />
+            <span>Prepostos</span>
+            <strong>{carregando ? "—" : quantidadePrepostos}</strong>
+            <small>Vendedores cadastrados na equipe</small>
+          </article>
+        )}
+        {ehPreposto && (
+          <article>
+            <span>Próxima ação</span>
+            <strong>{clientes.length > 0 ? "Visita" : "Cliente"}</strong>
+            <small>{clientes.length > 0 ? "Registre o próximo atendimento" : "Cadastre o primeiro cliente"}</small>
+          </article>
+        )}
       </section>
 
       <div className="grid">
@@ -130,6 +166,11 @@ export default function HomePage() {
                   <span>{[cliente.bairro, cliente.cidade].filter(Boolean).join(" • ") || "Local não informado"}</span>
                 </div>
                 <span className="tag">{cliente.representada}</span>
+                <span className={cliente.responsavelTipo === "preposto" ? "adminBadge" : "tag"}>
+                  {cliente.responsavelTipo === "preposto"
+                    ? `Preposto: ${cliente.responsavelNome ?? "Não identificado"}`
+                    : "Titular"}
+                </span>
                 <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>
                   {cliente.status}
                 </span>
