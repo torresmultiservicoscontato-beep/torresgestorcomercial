@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Building2, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { carregarPerfilAtual, salvarPerfilAtual } from "../lib/perfil";
+import { carregarAcessoAtual } from "../lib/acesso";
+import { salvarPerfilAtual } from "../lib/perfil";
 import { supabase } from "../lib/supabase";
 
 type Cadastro = {
@@ -69,8 +70,13 @@ export default function PrimeiroAcessoPage() {
         return;
       }
 
-      const perfil = await carregarPerfilAtual().catch(() => null);
-      if (perfil) {
+      if (data.user.user_metadata?.must_change_password) {
+        router.replace("/preposto/ativar");
+        return;
+      }
+
+      const acesso = await carregarAcessoAtual().catch(() => null);
+      if (acesso) {
         router.replace("/");
         return;
       }
@@ -258,54 +264,27 @@ export default function PrimeiroAcessoPage() {
 
             <label className="field">
               Número
-              <input
-                type="text"
-                required
-                value={cadastro.numero}
-                onChange={(event) => atualizar("numero", event.target.value)}
-              />
+              <input type="text" required value={cadastro.numero} onChange={(event) => atualizar("numero", event.target.value)} />
             </label>
 
             <label className="field">
               Complemento
-              <input
-                type="text"
-                value={cadastro.complemento}
-                onChange={(event) => atualizar("complemento", event.target.value)}
-                placeholder="Opcional"
-              />
+              <input type="text" value={cadastro.complemento} onChange={(event) => atualizar("complemento", event.target.value)} placeholder="Opcional" />
             </label>
 
             <label className="field">
               Bairro
-              <input
-                type="text"
-                required
-                value={cadastro.bairro}
-                onChange={(event) => atualizar("bairro", event.target.value)}
-              />
+              <input type="text" required value={cadastro.bairro} onChange={(event) => atualizar("bairro", event.target.value)} />
             </label>
 
             <label className="field">
               Cidade
-              <input
-                type="text"
-                required
-                value={cadastro.cidade}
-                onChange={(event) => atualizar("cidade", event.target.value)}
-              />
+              <input type="text" required value={cadastro.cidade} onChange={(event) => atualizar("cidade", event.target.value)} />
             </label>
 
             <label className="field">
               UF
-              <input
-                type="text"
-                required
-                maxLength={2}
-                value={cadastro.uf}
-                onChange={(event) => atualizar("uf", event.target.value.toUpperCase())}
-                placeholder="RJ"
-              />
+              <input type="text" required maxLength={2} value={cadastro.uf} onChange={(event) => atualizar("uf", event.target.value.toUpperCase())} placeholder="RJ" />
             </label>
           </div>
 
