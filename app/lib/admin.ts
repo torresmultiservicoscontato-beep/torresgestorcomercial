@@ -5,6 +5,7 @@ export type ResumoAdmin = {
   clientes: number;
   visitas: number;
   representadas: number;
+  prepostos: number;
 };
 
 export type UsuarioAdmin = {
@@ -17,6 +18,7 @@ export type UsuarioAdmin = {
   clientes: number;
   visitas: number;
   representadas: number;
+  prepostos: number;
 };
 
 type UsuarioAdminRow = {
@@ -29,6 +31,7 @@ type UsuarioAdminRow = {
   clientes: number;
   visitas: number;
   representadas: number;
+  prepostos: number;
 };
 
 export async function carregarResumoAdmin(): Promise<ResumoAdmin> {
@@ -45,6 +48,7 @@ export async function carregarResumoAdmin(): Promise<ResumoAdmin> {
     clientes: Number(row.clientes ?? 0),
     visitas: Number(row.visitas ?? 0),
     representadas: Number(row.representadas ?? 0),
+    prepostos: Number(row.prepostos ?? 0),
   };
 }
 
@@ -64,5 +68,6 @@ export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
     clientes: Number(row.clientes ?? 0),
     visitas: Number(row.visitas ?? 0),
     representadas: Number(row.representadas ?? 0),
+    prepostos: Number(row.prepostos ?? 0),
   }));
 }
