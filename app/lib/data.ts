@@ -1,5 +1,6 @@
-import { carregarAcessoAtual, pode } from "./acesso";
+import { carregarAcessoAtual, pode, type AcessoSistema } from "./acesso";
 import { limparRepresentanteAdministrado, obterRepresentanteAdministrado } from "./adminContext";
+import { limparPrepostoAdministrado, obterPrepostoAdministrado } from "./prepostoContext";
 import { supabase, supabaseConfigured } from "./supabase";
 
 export type Cliente = {
@@ -10,6 +11,9 @@ export type Cliente = {
   representada: string;
   telefone: string;
   status: string;
+  responsavelUserId?: string;
+  responsavelNome?: string;
+  responsavelTipo?: "titular" | "preposto";
 };
 
 export type Visita = {
@@ -20,6 +24,17 @@ export type Visita = {
   resultado: string;
   odometro: string;
   observacao: string;
+};
+
+type ClienteRow = {
+  id: string;
+  nome: string;
+  cidade: string;
+  bairro: string;
+  representada: string;
+  telefone: string;
+  status: string;
+  responsavel_user_id: string | null;
 };
 
 type VisitaRow = {
@@ -61,24 +76,102 @@ async function exigirUsuario(modulo: "clientes" | "visitas", acao: "visualizar" 
     limparRepresentanteAdministrado();
   }
 
-  const responsavelUserId = acesso.papel === "preposto" ? user.id : userIdAlvo;
-  return { cliente, user, userIdAlvo, responsavelUserId };
+  let prepostoAdministrado = acesso.papel === "preposto" ? null : obterPrepostoAdministrado();
+
+  if (acesso.papel === "preposto") {
+    limparPrepostoAdministrado();
+  } else if (prepostoAdministrado && prepostoAdministrado.titularUserId !== userIdAlvo) {
+    limparPrepostoAdministrado();
+    prepostoAdministrado = null;
+  }
+
+  const responsavelUserId = acesso.papel === "preposto"
+    ? user.id
+    : prepostoAdministrado?.userId ?? userIdAlvo;
+
+  const filtroResponsavelUserId = acesso.papel === "preposto"
+    ? user.id
+    : prepostoAdministrado?.userId ?? null;
+
+  return {
+    cliente,
+    user,
+    acesso,
+    userIdAlvo,
+    responsavelUserId,
+    filtroResponsavelUserId,
+  };
+}
+
+async function mapearClientes(
+  rows: ClienteRow[],
+  userIdAlvo: string,
+  acesso: AcessoSistema,
+): Promise<Cliente[]> {
+  const cliente = exigirSupabase();
+  const idsPrepostos = Array.from(
+    new Set(
+      rows
+        .map((row) => row.responsavel_user_id)
+        .filter((id): id is string => Boolean(id && id !== userIdAlvo)),
+    ),
+  );
+
+  const nomes = new Map<string, string>();
+
+  if (idsPrepostos.length > 0) {
+    const { data } = await cliente
+      .from("prepostos")
+      .select("user_id,nome")
+      .eq("titular_user_id", userIdAlvo)
+      .in("user_id", idsPrepostos);
+
+    for (const item of data ?? []) {
+      if (item.user_id) nomes.set(item.user_id, item.nome);
+    }
+  }
+
+  return rows.map((row) => {
+    const responsavelUserId = row.responsavel_user_id ?? userIdAlvo;
+    const titular = responsavelUserId === userIdAlvo;
+
+    return {
+      id: row.id,
+      nome: row.nome,
+      cidade: row.cidade,
+      bairro: row.bairro,
+      representada: row.representada,
+      telefone: row.telefone,
+      status: row.status,
+      responsavelUserId,
+      responsavelTipo: titular ? "titular" : "preposto",
+      responsavelNome: titular
+        ? "Titular"
+        : nomes.get(responsavelUserId) ?? (acesso.papel === "preposto" ? acesso.nome : "Preposto"),
+    };
+  });
 }
 
 export async function carregarClientes(): Promise<Cliente[]> {
-  const { cliente, userIdAlvo } = await exigirUsuario("clientes", "visualizar");
-  const { data, error } = await cliente
+  const { cliente, acesso, userIdAlvo, filtroResponsavelUserId } = await exigirUsuario("clientes", "visualizar");
+
+  let consulta = cliente
     .from("clientes")
-    .select("id,nome,cidade,bairro,representada,telefone,status")
-    .eq("user_id", userIdAlvo)
-    .order("created_at", { ascending: false });
+    .select("id,nome,cidade,bairro,representada,telefone,status,responsavel_user_id")
+    .eq("user_id", userIdAlvo);
+
+  if (filtroResponsavelUserId) {
+    consulta = consulta.eq("responsavel_user_id", filtroResponsavelUserId);
+  }
+
+  const { data, error } = await consulta.order("created_at", { ascending: false });
 
   if (error) throw new Error(`Falha ao carregar clientes: ${error.message}`);
-  return (data ?? []) as Cliente[];
+  return mapearClientes((data ?? []) as ClienteRow[], userIdAlvo, acesso);
 }
 
 export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
-  const { cliente, user, userIdAlvo, responsavelUserId } = await exigirUsuario("clientes", "cadastrar");
+  const { cliente, user, acesso, userIdAlvo, responsavelUserId } = await exigirUsuario("clientes", "cadastrar");
   const { data, error } = await cliente
     .from("clientes")
     .insert({
@@ -93,16 +186,18 @@ export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
       telefone: novoCliente.telefone,
       status: novoCliente.status,
     })
-    .select("id,nome,cidade,bairro,representada,telefone,status")
+    .select("id,nome,cidade,bairro,representada,telefone,status,responsavel_user_id")
     .single();
 
   if (error) throw new Error(`Falha ao salvar cliente: ${error.message}`);
-  return data as Cliente;
+  const [salvo] = await mapearClientes([data as ClienteRow], userIdAlvo, acesso);
+  return salvo;
 }
 
 export async function atualizarCliente(clienteAtualizado: Cliente): Promise<Cliente> {
-  const { cliente, userIdAlvo } = await exigirUsuario("clientes", "editar");
-  const { data, error } = await cliente
+  const { cliente, acesso, userIdAlvo, filtroResponsavelUserId } = await exigirUsuario("clientes", "editar");
+
+  let consulta = cliente
     .from("clientes")
     .update({
       nome: clienteAtualizado.nome,
@@ -114,20 +209,34 @@ export async function atualizarCliente(clienteAtualizado: Cliente): Promise<Clie
       updated_at: new Date().toISOString(),
     })
     .eq("id", clienteAtualizado.id)
-    .eq("user_id", userIdAlvo)
-    .select("id,nome,cidade,bairro,representada,telefone,status")
+    .eq("user_id", userIdAlvo);
+
+  if (filtroResponsavelUserId) {
+    consulta = consulta.eq("responsavel_user_id", filtroResponsavelUserId);
+  }
+
+  const { data, error } = await consulta
+    .select("id,nome,cidade,bairro,representada,telefone,status,responsavel_user_id")
     .single();
 
   if (error) throw new Error(`Falha ao atualizar cliente: ${error.message}`);
-  return data as Cliente;
+  const [salvo] = await mapearClientes([data as ClienteRow], userIdAlvo, acesso);
+  return salvo;
 }
 
 export async function carregarVisitas(): Promise<Visita[]> {
-  const { cliente, userIdAlvo } = await exigirUsuario("visitas", "visualizar");
-  const { data, error } = await cliente
+  const { cliente, userIdAlvo, filtroResponsavelUserId } = await exigirUsuario("visitas", "visualizar");
+
+  let consulta = cliente
     .from("visitas")
     .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
-    .eq("user_id", userIdAlvo)
+    .eq("user_id", userIdAlvo);
+
+  if (filtroResponsavelUserId) {
+    consulta = consulta.eq("responsavel_user_id", filtroResponsavelUserId);
+  }
+
+  const { data, error } = await consulta
     .order("data", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -178,8 +287,9 @@ export async function criarVisita(novaVisita: Visita): Promise<Visita> {
 }
 
 export async function atualizarVisita(visitaAtualizada: Visita): Promise<Visita> {
-  const { cliente, userIdAlvo } = await exigirUsuario("visitas", "editar");
-  const { data, error } = await cliente
+  const { cliente, userIdAlvo, filtroResponsavelUserId } = await exigirUsuario("visitas", "editar");
+
+  let consulta = cliente
     .from("visitas")
     .update({
       cliente_id: visitaAtualizada.clienteId,
@@ -191,7 +301,13 @@ export async function atualizarVisita(visitaAtualizada: Visita): Promise<Visita>
       updated_at: new Date().toISOString(),
     })
     .eq("id", visitaAtualizada.id)
-    .eq("user_id", userIdAlvo)
+    .eq("user_id", userIdAlvo);
+
+  if (filtroResponsavelUserId) {
+    consulta = consulta.eq("responsavel_user_id", filtroResponsavelUserId);
+  }
+
+  const { data, error } = await consulta
     .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
     .single();
 
