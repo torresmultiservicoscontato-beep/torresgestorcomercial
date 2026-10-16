@@ -67,7 +67,7 @@ async function resolverTitular() {
   if (error || !user) throw new Error("Sua sessão expirou. Entre novamente.");
 
   const perfil = await carregarPerfilAtual();
-  if (!perfil || perfil.papel === "preposto") {
+  if (!perfil) {
     throw new Error("Somente o representante titular pode administrar a equipe.");
   }
 
