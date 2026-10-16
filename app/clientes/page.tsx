@@ -62,7 +62,14 @@ export default function ClientesPage() {
     if (!termo) return clientes;
 
     return clientes.filter((cliente) =>
-      [cliente.nome, cliente.cidade, cliente.bairro, cliente.representada, cliente.telefone]
+      [
+        cliente.nome,
+        cliente.cidade,
+        cliente.bairro,
+        cliente.representada,
+        cliente.telefone,
+        cliente.responsavelNome,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(termo),
@@ -94,6 +101,10 @@ export default function ClientesPage() {
     event.preventDefault();
     if (!form.nome.trim() || salvando) return;
 
+    const clienteExistente = editandoId
+      ? clientes.find((cliente) => cliente.id === editandoId)
+      : null;
+
     const clienteParaSalvar: Cliente = {
       id: editandoId ?? `cliente-${crypto.randomUUID()}`,
       nome: form.nome.trim(),
@@ -102,6 +113,9 @@ export default function ClientesPage() {
       representada: form.representada.trim() || "Não informada",
       telefone: form.telefone.trim(),
       status: form.status,
+      responsavelUserId: clienteExistente?.responsavelUserId,
+      responsavelNome: clienteExistente?.responsavelNome,
+      responsavelTipo: clienteExistente?.responsavelTipo,
     };
 
     setSalvando(true);
@@ -206,7 +220,7 @@ export default function ClientesPage() {
 
       <div className="search">
         <Search size={19} />
-        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por cliente, cidade, bairro, telefone ou representada..." />
+        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por cliente, cidade, bairro, telefone, representada ou responsável..." />
       </div>
 
       <section className="panel">
@@ -227,6 +241,11 @@ export default function ClientesPage() {
                 {cliente.telefone && <span>{cliente.telefone}</span>}
               </div>
               <span className="tag">{cliente.representada}</span>
+              <span className={cliente.responsavelTipo === "preposto" ? "adminBadge" : "tag"}>
+                {cliente.responsavelTipo === "preposto"
+                  ? `Preposto: ${cliente.responsavelNome ?? "Não identificado"}`
+                  : "Titular"}
+              </span>
               <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>{cliente.status}</span>
               {podeEditar && (
                 <button className="iconBtn editDataButton" type="button" onClick={() => editar(cliente)} title="Editar cliente">
