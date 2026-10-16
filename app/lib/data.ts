@@ -1,3 +1,4 @@
+import { carregarAcessoAtual, pode } from "./acesso";
 import { limparRepresentanteAdministrado, obterRepresentanteAdministrado } from "./adminContext";
 import { supabase, supabaseConfigured } from "./supabase";
 
@@ -34,47 +35,38 @@ type VisitaRow = {
 export const bancoRemotoAtivo = supabaseConfigured;
 
 function exigirSupabase() {
-  if (!supabase) {
-    throw new Error("Banco de dados não configurado.");
-  }
-
+  if (!supabase) throw new Error("Banco de dados não configurado.");
   return supabase;
 }
 
-async function exigirUsuario() {
+async function exigirUsuario(modulo: "clientes" | "visitas", acao: "visualizar" | "cadastrar" | "editar") {
   const cliente = exigirSupabase();
   const {
     data: { user },
     error,
   } = await cliente.auth.getUser();
 
-  if (error || !user) {
-    throw new Error("Sua sessão expirou. Entre novamente no sistema.");
-  }
+  if (error || !user) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
 
-  let userIdAlvo = user.id;
+  const acesso = await carregarAcessoAtual();
+  if (!acesso) throw new Error("Não foi possível identificar seu acesso.");
+  if (!pode(acesso, modulo, acao)) throw new Error("Você não possui permissão para esta ação.");
+
+  let userIdAlvo = acesso.titularUserId;
   const representanteAdministrado = obterRepresentanteAdministrado();
 
-  if (representanteAdministrado && representanteAdministrado.userId !== user.id) {
-    const { data: perfil, error: perfilError } = await cliente
-      .from("perfis")
-      .select("papel")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (perfilError || perfil?.papel !== "admin") {
-      limparRepresentanteAdministrado();
-    } else {
-      userIdAlvo = representanteAdministrado.userId;
-    }
+  if (acesso.papel === "admin" && representanteAdministrado && representanteAdministrado.userId !== user.id) {
+    userIdAlvo = representanteAdministrado.userId;
+  } else if (acesso.papel !== "admin" && representanteAdministrado) {
+    limparRepresentanteAdministrado();
   }
 
-  return { cliente, userIdAlvo };
+  const responsavelUserId = acesso.papel === "preposto" ? user.id : userIdAlvo;
+  return { cliente, user, userIdAlvo, responsavelUserId };
 }
 
 export async function carregarClientes(): Promise<Cliente[]> {
-  const { cliente, userIdAlvo } = await exigirUsuario();
-
+  const { cliente, userIdAlvo } = await exigirUsuario("clientes", "visualizar");
   const { data, error } = await cliente
     .from("clientes")
     .select("id,nome,cidade,bairro,representada,telefone,status")
@@ -86,13 +78,14 @@ export async function carregarClientes(): Promise<Cliente[]> {
 }
 
 export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
-  const { cliente, userIdAlvo } = await exigirUsuario();
-
+  const { cliente, user, userIdAlvo, responsavelUserId } = await exigirUsuario("clientes", "cadastrar");
   const { data, error } = await cliente
     .from("clientes")
     .insert({
       id: novoCliente.id,
       user_id: userIdAlvo,
+      criado_por_user_id: user.id,
+      responsavel_user_id: responsavelUserId,
       nome: novoCliente.nome,
       cidade: novoCliente.cidade,
       bairro: novoCliente.bairro,
@@ -108,8 +101,7 @@ export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
 }
 
 export async function atualizarCliente(clienteAtualizado: Cliente): Promise<Cliente> {
-  const { cliente, userIdAlvo } = await exigirUsuario();
-
+  const { cliente, userIdAlvo } = await exigirUsuario("clientes", "editar");
   const { data, error } = await cliente
     .from("clientes")
     .update({
@@ -131,8 +123,7 @@ export async function atualizarCliente(clienteAtualizado: Cliente): Promise<Clie
 }
 
 export async function carregarVisitas(): Promise<Visita[]> {
-  const { cliente, userIdAlvo } = await exigirUsuario();
-
+  const { cliente, userIdAlvo } = await exigirUsuario("visitas", "visualizar");
   const { data, error } = await cliente
     .from("visitas")
     .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
@@ -154,13 +145,14 @@ export async function carregarVisitas(): Promise<Visita[]> {
 }
 
 export async function criarVisita(novaVisita: Visita): Promise<Visita> {
-  const { cliente, userIdAlvo } = await exigirUsuario();
-
+  const { cliente, user, userIdAlvo, responsavelUserId } = await exigirUsuario("visitas", "cadastrar");
   const { data, error } = await cliente
     .from("visitas")
     .insert({
       id: novaVisita.id,
       user_id: userIdAlvo,
+      criado_por_user_id: user.id,
+      responsavel_user_id: responsavelUserId,
       cliente_id: novaVisita.clienteId,
       cliente_nome: novaVisita.clienteNome,
       data: novaVisita.data,
@@ -186,8 +178,7 @@ export async function criarVisita(novaVisita: Visita): Promise<Visita> {
 }
 
 export async function atualizarVisita(visitaAtualizada: Visita): Promise<Visita> {
-  const { cliente, userIdAlvo } = await exigirUsuario();
-
+  const { cliente, userIdAlvo } = await exigirUsuario("visitas", "editar");
   const { data, error } = await cliente
     .from("visitas")
     .update({
