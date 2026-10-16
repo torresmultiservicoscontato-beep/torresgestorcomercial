@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, ClipboardCheck, Eye, ShieldCheck, Users } from "lucide-react";
+import { Building2, ClipboardCheck, Eye, ShieldCheck, UserRoundCog, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "../components/AppShell";
 import { definirRepresentanteAdministrado } from "../lib/adminContext";
@@ -14,6 +14,7 @@ const resumoInicial: ResumoAdmin = {
   clientes: 0,
   visitas: 0,
   representadas: 0,
+  prepostos: 0,
 };
 
 export default function AdminPage() {
@@ -93,6 +94,12 @@ export default function AdminPage() {
               <small>Contas titulares cadastradas</small>
             </article>
             <article>
+              <UserRoundCog size={20} />
+              <span>Prepostos</span>
+              <strong>{resumo.prepostos}</strong>
+              <small>Vendedores vinculados</small>
+            </article>
+            <article>
               <Building2 size={20} />
               <span>Representadas</span>
               <strong>{resumo.representadas}</strong>
@@ -128,6 +135,7 @@ export default function AdminPage() {
                     <th>Usuário</th>
                     <th>Representação</th>
                     <th>Acesso</th>
+                    <th>Prepostos</th>
                     <th>Representadas</th>
                     <th>Clientes</th>
                     <th>Visitas</th>
@@ -148,6 +156,7 @@ export default function AdminPage() {
                           {usuario.papel === "admin" ? "Administrador" : "Usuário"}
                         </span>
                       </td>
+                      <td>{usuario.prepostos}</td>
                       <td>{usuario.representadas}</td>
                       <td>{usuario.clientes}</td>
                       <td>{usuario.visitas}</td>
