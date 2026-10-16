@@ -1,23 +1,30 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Search, X } from "lucide-react";
+import { Building2, Pencil, Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
-import { Cliente, atualizarCliente, carregarClientes, criarCliente } from "../lib/data";
+import {
+  Cliente,
+  RepresentadaOperacional,
+  atualizarCliente,
+  carregarClientes,
+  carregarRepresentadasOperacionais,
+  criarCliente,
+} from "../lib/data";
 
 const formInicial = {
   nome: "",
   cidade: "",
   bairro: "",
-  representada: "",
+  representadaIds: [] as string[],
   telefone: "",
   status: "Ativo",
 };
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [representadas, setRepresentadas] = useState<string[]>([]);
+  const [representadas, setRepresentadas] = useState<RepresentadaOperacional[]>([]);
   const [busca, setBusca] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -31,17 +38,21 @@ export default function ClientesPage() {
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarAcessoAtual()])
-      .then(([listaClientes, acesso]) => {
+    void Promise.all([carregarClientes(), carregarRepresentadasOperacionais(), carregarAcessoAtual()])
+      .then(([listaClientes, listaRepresentadas, acesso]) => {
         if (!ativo) return;
         setClientes(listaClientes);
-        const listaRepresentadas = acesso?.representadas ?? [];
         setRepresentadas(listaRepresentadas);
         setPodeCadastrar(pode(acesso, "clientes", "cadastrar"));
         setPodeEditar(pode(acesso, "clientes", "editar"));
         setForm((atual) => ({
           ...atual,
-          representada: atual.representada || listaRepresentadas[0] || "Não informada",
+          representadaIds:
+            atual.representadaIds.length > 0
+              ? atual.representadaIds
+              : listaRepresentadas.length === 1
+                ? [listaRepresentadas[0].id]
+                : [],
         }));
       })
       .catch((falha: Error) => {
@@ -76,10 +87,23 @@ export default function ClientesPage() {
     );
   }, [busca, clientes]);
 
+  function representadasPadrao() {
+    return representadas.length === 1 ? [representadas[0].id] : [];
+  }
+
   function fecharFormulario() {
     setEditandoId(null);
     setMostrarForm(false);
-    setForm({ ...formInicial, representada: representadas[0] || "Não informada" });
+    setForm({ ...formInicial, representadaIds: representadasPadrao() });
+  }
+
+  function alterarRepresentada(id: string, marcada: boolean) {
+    setForm((atual) => ({
+      ...atual,
+      representadaIds: marcada
+        ? Array.from(new Set([...atual.representadaIds, id]))
+        : atual.representadaIds.filter((item) => item !== id),
+    }));
   }
 
   function editar(cliente: Cliente) {
@@ -89,7 +113,7 @@ export default function ClientesPage() {
       nome: cliente.nome,
       cidade: cliente.cidade,
       bairro: cliente.bairro,
-      representada: cliente.representada,
+      representadaIds: cliente.representadas.map((item) => item.id),
       telefone: cliente.telefone,
       status: cliente.status,
     });
@@ -100,17 +124,28 @@ export default function ClientesPage() {
   async function salvarCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.nome.trim() || salvando) return;
+    if (form.representadaIds.length === 0) {
+      setErro("Selecione pelo menos uma representada para este cliente.");
+      return;
+    }
 
     const clienteExistente = editandoId
       ? clientes.find((cliente) => cliente.id === editandoId)
       : null;
+
+    const representadasSelecionadas = representadas.filter((item) => form.representadaIds.includes(item.id));
+    if (representadasSelecionadas.length !== form.representadaIds.length) {
+      setErro("Uma das representadas selecionadas não está disponível nesta operação.");
+      return;
+    }
 
     const clienteParaSalvar: Cliente = {
       id: editandoId ?? `cliente-${crypto.randomUUID()}`,
       nome: form.nome.trim(),
       cidade: form.cidade.trim(),
       bairro: form.bairro.trim(),
-      representada: form.representada.trim() || "Não informada",
+      representada: representadasSelecionadas.map((item) => item.nome).join(" • "),
+      representadas: representadasSelecionadas,
       telefone: form.telefone.trim(),
       status: form.status,
       responsavelUserId: clienteExistente?.responsavelUserId,
@@ -153,7 +188,10 @@ export default function ClientesPage() {
             className="primary"
             onClick={() => {
               if (mostrarForm) fecharFormulario();
-              else setMostrarForm(true);
+              else {
+                setForm({ ...formInicial, representadaIds: representadasPadrao() });
+                setMostrarForm(true);
+              }
             }}
           >
             {mostrarForm ? <X size={18} /> : <Plus size={18} />}
@@ -186,14 +224,42 @@ export default function ClientesPage() {
               Bairro
               <input value={form.bairro} onChange={(event) => setForm({ ...form, bairro: event.target.value })} placeholder="Ex.: Centro" />
             </label>
-            <label className="field">
-              Representada
-              <select value={form.representada} onChange={(event) => setForm({ ...form, representada: event.target.value })}>
-                {representadas.length > 0 ? representadas.map((representada) => (
-                  <option key={representada} value={representada}>{representada}</option>
-                )) : <option>Não informada</option>}
-              </select>
-            </label>
+          </div>
+
+          <div className="permissionsBlock">
+            <div className="settingsSectionTitle">
+              <Building2 size={18} />
+              <div>
+                <strong>Representadas atendidas pelo cliente</strong>
+                <span>Marque uma ou mais representadas com as quais este cliente compra nesta carteira.</span>
+              </div>
+            </div>
+
+            {representadas.length > 0 ? (
+              <div className="representadasChecklist">
+                {representadas.map((representada) => {
+                  const selecionada = form.representadaIds.includes(representada.id);
+                  return (
+                    <label className="representadaOption" key={representada.id}>
+                      <input
+                        type="checkbox"
+                        checked={selecionada}
+                        onChange={(event) => alterarRepresentada(representada.id, event.target.checked)}
+                      />
+                      <span>
+                        <strong>{representada.nome}</strong>
+                        <small>{selecionada ? "Selecionada para este cliente" : "Disponível"}</small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="emptyState">Nenhuma representada disponível para esta operação.</div>
+            )}
+          </div>
+
+          <div className="formGrid">
             <label className="field">
               Telefone / WhatsApp
               <input value={form.telefone} onChange={(event) => setForm({ ...form, telefone: event.target.value })} placeholder="(21) 99999-9999" />
@@ -211,7 +277,7 @@ export default function ClientesPage() {
 
           <div className="formActions">
             <button className="secondary" type="button" onClick={fecharFormulario}>Cancelar</button>
-            <button className="primary" type="submit" disabled={salvando}>
+            <button className="primary" type="submit" disabled={salvando || representadas.length === 0}>
               {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar cliente"}
             </button>
           </div>
@@ -239,8 +305,12 @@ export default function ClientesPage() {
                 <strong>{cliente.nome}</strong>
                 <span>{[cliente.bairro, cliente.cidade].filter(Boolean).join(" • ") || "Local não informado"}</span>
                 {cliente.telefone && <span>{cliente.telefone}</span>}
+                <div className="representadasTags">
+                  {cliente.representadas.map((representada) => (
+                    <span className="tag" key={representada.id}>{representada.nome}</span>
+                  ))}
+                </div>
               </div>
-              <span className="tag">{cliente.representada}</span>
               <span className={cliente.responsavelTipo === "preposto" ? "adminBadge" : "tag"}>
                 {cliente.responsavelTipo === "preposto"
                   ? `Preposto: ${cliente.responsavelNome ?? "Não identificado"}`
