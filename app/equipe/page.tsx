@@ -265,7 +265,7 @@ export default function EquipePage() {
                 <ShieldCheck size={18} />
                 <div>
                   <strong>Representadas deste vínculo</strong>
-                  <span>Marque uma ou mais. Uma representada já comprometida com este preposto em outra operação fica bloqueada.</span>
+                  <span>Cada representada pode ficar com apenas um preposto nesta equipe. O mesmo preposto também não pode repetir a representada em outra operação.</span>
                 </div>
               </div>
 
@@ -275,7 +275,8 @@ export default function EquipePage() {
                 <div className="representadasChecklist">
                   {representadas.map((representada) => {
                     const selecionada = form.representadaIds.includes(representada.id);
-                    const indisponivel = representada.disponivel === false && !selecionada;
+                    const conflito = representada.disponivel === false;
+                    const indisponivel = conflito && !selecionada;
                     return (
                       <label className={indisponivel ? "representadaOption disabled" : "representadaOption"} key={representada.id}>
                         <input
@@ -287,8 +288,10 @@ export default function EquipePage() {
                         <span>
                           <strong>{representada.nome}</strong>
                           <small>
-                            {indisponivel
-                              ? "Já vinculada a este preposto em outra operação"
+                            {conflito
+                              ? selecionada
+                                ? "Conflito: esta representada já está atribuída a outro preposto desta equipe. Desmarque-a para corrigir."
+                                : "Indisponível: já atribuída a outro preposto desta equipe ou a este preposto em outra operação"
                               : representada.cnpj
                                 ? `CNPJ: ${representada.cnpj}`
                                 : "Disponível"}
