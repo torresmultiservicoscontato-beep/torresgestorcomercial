@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { LockKeyhole, Mail } from "lucide-react";
-import { carregarPerfilAtual } from "../lib/perfil";
+import { carregarAcessoAtual } from "../lib/acesso";
 import { supabase } from "../lib/supabase";
 
 type ModoAcesso = "entrar" | "cadastrar" | "recuperar";
@@ -28,8 +28,13 @@ export default function LoginPage() {
         return;
       }
 
-      const perfil = await carregarPerfilAtual().catch(() => null);
-      redirecionar(perfil ? "/" : "/primeiro-acesso");
+      if (data.user.user_metadata?.must_change_password) {
+        redirecionar("/preposto/ativar");
+        return;
+      }
+
+      const acesso = await carregarAcessoAtual().catch(() => null);
+      redirecionar(acesso ? "/" : "/primeiro-acesso");
     });
   }, []);
 
@@ -44,26 +49,27 @@ export default function LoginPage() {
     try {
       if (modo === "recuperar") {
         const redirectTo = `${window.location.origin}/redefinir-senha`;
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo,
-        });
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
 
         if (error) throw error;
-        setMensagem(
-          "Se esse e-mail estiver cadastrado, você receberá um link para definir uma nova senha.",
-        );
+        setMensagem("Se esse e-mail estiver cadastrado, você receberá um link para definir uma nova senha.");
         return;
       }
 
       if (modo === "entrar") {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password: senha,
         });
 
         if (error) throw error;
-        const perfil = await carregarPerfilAtual().catch(() => null);
-        redirecionar(perfil ? "/" : "/primeiro-acesso");
+        if (data.user?.user_metadata?.must_change_password) {
+          redirecionar("/preposto/ativar");
+          return;
+        }
+
+        const acesso = await carregarAcessoAtual().catch(() => null);
+        redirecionar(acesso ? "/" : "/primeiro-acesso");
         return;
       }
 
@@ -82,9 +88,7 @@ export default function LoginPage() {
         return;
       }
 
-      setMensagem(
-        "Acesso criado. Confirme o e-mail recebido e depois entre para completar seu primeiro acesso.",
-      );
+      setMensagem("Acesso criado. Confirme o e-mail recebido e depois entre para completar seu primeiro acesso.");
       setModo("entrar");
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível concluir o acesso.");
@@ -93,19 +97,12 @@ export default function LoginPage() {
     }
   }
 
-  const titulo =
-    modo === "entrar"
-      ? "Entrar no sistema"
-      : modo === "cadastrar"
-        ? "Criar meu acesso"
-        : "Recuperar minha senha";
-
-  const descricao =
-    modo === "entrar"
-      ? "Use seu e-mail e senha para acessar o Torres Gestor Comercial."
-      : modo === "cadastrar"
-        ? "Crie seu acesso com e-mail e senha. Seus dados comerciais serão preenchidos na próxima etapa."
-        : "Informe seu e-mail. Enviaremos um link seguro para você criar uma nova senha.";
+  const titulo = modo === "entrar" ? "Entrar no sistema" : modo === "cadastrar" ? "Criar meu acesso" : "Recuperar minha senha";
+  const descricao = modo === "entrar"
+    ? "Use seu e-mail e senha para acessar o Torres Gestor Comercial."
+    : modo === "cadastrar"
+      ? "Crie seu acesso com e-mail e senha. Seus dados comerciais serão preenchidos na próxima etapa."
+      : "Informe seu e-mail. Enviaremos um link seguro para você criar uma nova senha.";
 
   return (
     <main className="loginPage">
@@ -176,13 +173,7 @@ export default function LoginPage() {
           )}
 
           <button className="primary wide" type="submit" disabled={carregando}>
-            {carregando
-              ? "Aguarde..."
-              : modo === "entrar"
-                ? "Entrar"
-                : modo === "cadastrar"
-                  ? "Criar acesso"
-                  : "Enviar link de recuperação"}
+            {carregando ? "Aguarde..." : modo === "entrar" ? "Entrar" : modo === "cadastrar" ? "Criar acesso" : "Enviar link de recuperação"}
           </button>
         </form>
 
