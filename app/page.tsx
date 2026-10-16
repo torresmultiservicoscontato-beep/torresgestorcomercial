@@ -5,7 +5,7 @@ import { ChevronRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "./components/AppShell";
 import { Cliente, Visita, carregarClientes, carregarVisitas } from "./lib/data";
-import { carregarPerfilAtual } from "./lib/perfil";
+import { carregarPerfilOperacional } from "./lib/perfil";
 
 function saudacaoAtual() {
   const hora = new Date().getHours();
@@ -26,7 +26,7 @@ export default function HomePage() {
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarVisitas(), carregarPerfilAtual()])
+    void Promise.all([carregarClientes(), carregarVisitas(), carregarPerfilOperacional()])
       .then(([listaClientes, listaVisitas, perfil]) => {
         if (!ativo) return;
         setClientes(listaClientes);
@@ -151,7 +151,7 @@ export default function HomePage() {
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Nova visita</h2>
           <p>
-            Registre cliente, data, odômetro, resultado e observações. O histórico fica salvo no Supabase e vinculado ao seu usuário.
+            Registre cliente, data, odômetro, resultado e observações. O histórico fica salvo no Supabase e vinculado ao usuário operacional selecionado.
           </p>
           <Link className="primary wide" href={clientes.length > 0 ? "/visitas" : "/clientes"}>
             {clientes.length > 0 ? "Registrar visita" : "Cadastrar primeiro cliente"}
