@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Pencil, X } from "lucide-react";
 import AppShell from "../components/AppShell";
+import { carregarAcessoAtual, pode } from "../lib/acesso";
 import { Cliente, Visita, atualizarVisita, carregarClientes, carregarVisitas, criarVisita } from "../lib/data";
 
 function hojeLocal() {
@@ -14,13 +15,7 @@ function hojeLocal() {
 }
 
 function formInicial() {
-  return {
-    clienteId: "",
-    data: hojeLocal(),
-    resultado: "Sem venda",
-    odometro: "",
-    observacao: "",
-  };
+  return { clienteId: "", data: hojeLocal(), resultado: "Sem venda", odometro: "", observacao: "" };
 }
 
 export default function VisitasPage() {
@@ -31,15 +26,19 @@ export default function VisitasPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [form, setForm] = useState(formInicial());
+  const [podeCadastrar, setPodeCadastrar] = useState(false);
+  const [podeEditar, setPodeEditar] = useState(false);
 
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarVisitas()])
-      .then(([listaClientes, listaVisitas]) => {
+    void Promise.all([carregarClientes(), carregarVisitas(), carregarAcessoAtual()])
+      .then(([listaClientes, listaVisitas, acesso]) => {
         if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
+        setPodeCadastrar(pode(acesso, "visitas", "cadastrar"));
+        setPodeEditar(pode(acesso, "visitas", "editar"));
       })
       .catch((falha: Error) => {
         if (!ativo) return;
@@ -65,6 +64,7 @@ export default function VisitasPage() {
   }
 
   function editar(visita: Visita) {
+    if (!podeEditar) return;
     setEditandoId(visita.id);
     setForm({
       clienteId: visita.clienteId,
@@ -123,7 +123,7 @@ export default function VisitasPage() {
         <div>
           <p className="eyebrow">ROTINA DE CAMPO</p>
           <h1>Visitas</h1>
-          <p>Registre e altere os atendimentos do usuário operacional selecionado.</p>
+          <p>Registre e acompanhe os atendimentos da operação comercial.</p>
           <span className="tag">Banco online</span>
         </div>
       </header>
@@ -131,85 +131,65 @@ export default function VisitasPage() {
       {erro && <div className="emptyState">{erro}</div>}
 
       <div className="grid visitsGrid">
-        <form className="panel visit" onSubmit={registrarVisita}>
-          <p className="eyebrow">{editandoId ? "ALTERAÇÃO" : "NOVO REGISTRO"}</p>
-          <div className="panelTitle">
-            <h2>{editandoId ? "Editar visita" : "Registrar visita"}</h2>
-            {editandoId && (
-              <button className="iconBtn" type="button" onClick={cancelarEdicao} title="Cancelar edição">
-                <X size={16} />
-              </button>
-            )}
-          </div>
+        {(podeCadastrar || editandoId) && (
+          <form className="panel visit" onSubmit={registrarVisita}>
+            <p className="eyebrow">{editandoId ? "ALTERAÇÃO" : "NOVO REGISTRO"}</p>
+            <div className="panelTitle">
+              <h2>{editandoId ? "Editar visita" : "Registrar visita"}</h2>
+              {editandoId && (
+                <button className="iconBtn" type="button" onClick={cancelarEdicao} title="Cancelar edição">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
 
-          <label className="field">
-            Cliente
-            <select
-              required
-              value={form.clienteId}
-              disabled={carregando || clientes.length === 0}
-              onChange={(event) => setForm({ ...form, clienteId: event.target.value })}
-            >
-              <option value="" disabled>
-                {carregando
-                  ? "Carregando clientes..."
-                  : clientes.length === 0
-                    ? "Cadastre um cliente primeiro"
-                    : "Selecionar cliente"}
-              </option>
-              {clientes.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>
-              ))}
-            </select>
-          </label>
-
-          <div className="two">
             <label className="field">
-              Data
-              <input
-                type="date"
-                value={form.data}
-                onChange={(event) => setForm({ ...form, data: event.target.value })}
-              />
+              Cliente
+              <select
+                required
+                value={form.clienteId}
+                disabled={carregando || clientes.length === 0}
+                onChange={(event) => setForm({ ...form, clienteId: event.target.value })}
+              >
+                <option value="" disabled>
+                  {carregando ? "Carregando clientes..." : clientes.length === 0 ? "Cadastre um cliente primeiro" : "Selecionar cliente"}
+                </option>
+                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+              </select>
             </label>
+
+            <div className="two">
+              <label className="field">
+                Data
+                <input type="date" value={form.data} onChange={(event) => setForm({ ...form, data: event.target.value })} />
+              </label>
+              <label className="field">
+                Odômetro
+                <input value={form.odometro} onChange={(event) => setForm({ ...form, odometro: event.target.value })} placeholder="Ex.: 42.180 km" />
+              </label>
+            </div>
+
             <label className="field">
-              Odômetro
-              <input
-                value={form.odometro}
-                onChange={(event) => setForm({ ...form, odometro: event.target.value })}
-                placeholder="Ex.: 42.180 km"
-              />
+              Resultado
+              <select value={form.resultado} onChange={(event) => setForm({ ...form, resultado: event.target.value })}>
+                <option>Sem venda</option>
+                <option>Pedido realizado</option>
+                <option>Retorno agendado</option>
+                <option>Cliente ausente</option>
+                <option>Prospecção</option>
+              </select>
             </label>
-          </div>
 
-          <label className="field">
-            Resultado
-            <select
-              value={form.resultado}
-              onChange={(event) => setForm({ ...form, resultado: event.target.value })}
-            >
-              <option>Sem venda</option>
-              <option>Pedido realizado</option>
-              <option>Retorno agendado</option>
-              <option>Cliente ausente</option>
-              <option>Prospecção</option>
-            </select>
-          </label>
+            <label className="field">
+              Observação
+              <textarea value={form.observacao} onChange={(event) => setForm({ ...form, observacao: event.target.value })} placeholder="Anote pedido, necessidade, retorno ou qualquer detalhe importante..." rows={4} />
+            </label>
 
-          <label className="field">
-            Observação
-            <textarea
-              value={form.observacao}
-              onChange={(event) => setForm({ ...form, observacao: event.target.value })}
-              placeholder="Anote pedido, necessidade, retorno ou qualquer detalhe importante..."
-              rows={4}
-            />
-          </label>
-
-          <button className="primary wide" type="submit" disabled={salvando || carregando || clientes.length === 0}>
-            <ClipboardCheck size={18} /> {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Registrar visita"}
-          </button>
-        </form>
+            <button className="primary wide" type="submit" disabled={salvando || carregando || clientes.length === 0}>
+              <ClipboardCheck size={18} /> {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Registrar visita"}
+            </button>
+          </form>
+        )}
 
         <section className="panel">
           <div className="panelTitle">
@@ -228,18 +208,18 @@ export default function VisitasPage() {
                 </div>
                 <div className="visitItemActions">
                   <span className="tag">{visita.resultado}</span>
-                  <button className="iconBtn editDataButton" type="button" onClick={() => editar(visita)} title="Editar visita">
-                    <Pencil size={14} />
-                  </button>
+                  {podeEditar && (
+                    <button className="iconBtn editDataButton" type="button" onClick={() => editar(visita)} title="Editar visita">
+                      <Pencil size={14} />
+                    </button>
+                  )}
                 </div>
                 {visita.odometro && <small>Odômetro: {visita.odometro}</small>}
                 {visita.observacao && <p>{visita.observacao}</p>}
               </article>
             ))}
 
-            {!carregando && visitasOrdenadas.length === 0 && (
-              <div className="emptyState">Ainda não há visitas registradas.</div>
-            )}
+            {!carregando && visitasOrdenadas.length === 0 && <div className="emptyState">Ainda não há visitas registradas.</div>}
           </div>
         </section>
       </div>
