@@ -1,3 +1,4 @@
+import { limparRepresentanteAdministrado, obterRepresentanteAdministrado } from "./adminContext";
 import { supabase, supabaseConfigured } from "./supabase";
 
 export type Cliente = {
@@ -51,15 +52,33 @@ async function exigirUsuario() {
     throw new Error("Sua sessão expirou. Entre novamente no sistema.");
   }
 
-  return { cliente, user };
+  let userIdAlvo = user.id;
+  const representanteAdministrado = obterRepresentanteAdministrado();
+
+  if (representanteAdministrado && representanteAdministrado.userId !== user.id) {
+    const { data: perfil, error: perfilError } = await cliente
+      .from("perfis")
+      .select("papel")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (perfilError || perfil?.papel !== "admin") {
+      limparRepresentanteAdministrado();
+    } else {
+      userIdAlvo = representanteAdministrado.userId;
+    }
+  }
+
+  return { cliente, user, userIdAlvo };
 }
 
 export async function carregarClientes(): Promise<Cliente[]> {
-  const { cliente } = await exigirUsuario();
+  const { cliente, userIdAlvo } = await exigirUsuario();
 
   const { data, error } = await cliente
     .from("clientes")
     .select("id,nome,cidade,bairro,representada,telefone,status")
+    .eq("user_id", userIdAlvo)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Falha ao carregar clientes: ${error.message}`);
@@ -67,13 +86,13 @@ export async function carregarClientes(): Promise<Cliente[]> {
 }
 
 export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
-  const { cliente, user } = await exigirUsuario();
+  const { cliente, userIdAlvo } = await exigirUsuario();
 
   const { data, error } = await cliente
     .from("clientes")
     .insert({
       id: novoCliente.id,
-      user_id: user.id,
+      user_id: userIdAlvo,
       nome: novoCliente.nome,
       cidade: novoCliente.cidade,
       bairro: novoCliente.bairro,
@@ -89,11 +108,12 @@ export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
 }
 
 export async function carregarVisitas(): Promise<Visita[]> {
-  const { cliente } = await exigirUsuario();
+  const { cliente, userIdAlvo } = await exigirUsuario();
 
   const { data, error } = await cliente
     .from("visitas")
     .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
+    .eq("user_id", userIdAlvo)
     .order("data", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -111,13 +131,13 @@ export async function carregarVisitas(): Promise<Visita[]> {
 }
 
 export async function criarVisita(novaVisita: Visita): Promise<Visita> {
-  const { cliente, user } = await exigirUsuario();
+  const { cliente, userIdAlvo } = await exigirUsuario();
 
   const { data, error } = await cliente
     .from("visitas")
     .insert({
       id: novaVisita.id,
-      user_id: user.id,
+      user_id: userIdAlvo,
       cliente_id: novaVisita.clienteId,
       cliente_nome: novaVisita.clienteNome,
       data: novaVisita.data,
