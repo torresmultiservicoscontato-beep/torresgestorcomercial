@@ -33,10 +33,9 @@ function formInicial() {
     data: hojeLocal(),
     horaEntrada: "",
     horaSaida: "",
-    odometroInicial: "",
-    odometroFinal: "",
-    origem: "",
-    destino: "",
+    odometroChegada: "",
+    origemClienteId: "",
+    destinoClienteId: "",
     tipoContato: "Presencial" as TipoContato,
     houveVenda: false,
     valorVenda: "",
@@ -81,6 +80,31 @@ function formatarMoeda(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+const diasPorFrequencia: Record<string, number> = {
+  "1 semana": 7,
+  "2 semanas": 14,
+  "3 semanas": 21,
+  "4 semanas": 28,
+  "30 dias": 30,
+  "60 dias": 60,
+  "90 dias": 90,
+};
+
+function somarDias(data: string, dias: number) {
+  if (!data) return "";
+  const [ano, mes, dia] = data.split("-").map(Number);
+  if (!ano || !mes || !dia) return "";
+  const valor = new Date(Date.UTC(ano, mes - 1, dia));
+  valor.setUTCDate(valor.getUTCDate() + dias);
+  return valor.toISOString().slice(0, 10);
+}
+
+function proximaDataAutomatica(data: string, proximaAcao: string, frequencia: string) {
+  if (proximaAcao !== "Retorno") return "";
+  const dias = diasPorFrequencia[frequencia];
+  return dias ? somarDias(data, dias) : "";
+}
+
 export default function VisitasPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [visitas, setVisitas] = useState<VisitaDetalhada[]>([]);
@@ -123,6 +147,12 @@ export default function VisitasPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const calculada = proximaDataAutomatica(form.data, form.proximaAcao, form.frequencia);
+    if (!calculada || calculada === form.proximaData) return;
+    setForm((atual) => ({ ...atual, proximaData: calculada }));
+  }, [form.data, form.proximaAcao, form.frequencia, form.proximaData]);
+
   const visitasOrdenadas = useMemo(
     () => [...visitas].sort((a, b) => `${b.data} ${b.horaEntrada}`.localeCompare(`${a.data} ${a.horaEntrada}`)),
     [visitas],
@@ -138,23 +168,32 @@ export default function VisitasPage() {
     [clienteSelecionado],
   );
 
+  function encontrarVisitaAnterior(data: string, horaEntrada: string) {
+    return [...visitas]
+      .filter((visita) => {
+        if (visita.data !== data || visita.id === editandoId) return false;
+        if (!horaEntrada || !visita.horaEntrada) return true;
+        return visita.horaEntrada < horaEntrada;
+      })
+      .sort((a, b) => (b.horaEntrada || "").localeCompare(a.horaEntrada || ""))[0] ?? null;
+  }
+
+  const visitaAnterior = useMemo(
+    () => encontrarVisitaAnterior(form.data, form.horaEntrada),
+    [visitas, form.data, form.horaEntrada, editandoId],
+  );
+
   const duracaoCalculada = useMemo(
     () => minutosEntre(form.horaEntrada, form.horaSaida),
     [form.horaEntrada, form.horaSaida],
   );
 
   const kmCalculado = useMemo(() => {
-    const inicial = numeroCampo(form.odometroInicial);
-    const final = numeroCampo(form.odometroFinal);
-    if (inicial === null || final === null || final < inicial) return null;
-    return Math.round((final - inicial) * 10) / 10;
-  }, [form.odometroInicial, form.odometroFinal]);
-
-  function ultimaVisitaDoDia(data: string) {
-    return [...visitas]
-      .filter((visita) => visita.data === data && visita.id !== editandoId && visita.odometroFinal)
-      .sort((a, b) => (b.horaSaida || b.horaEntrada || "").localeCompare(a.horaSaida || a.horaEntrada || ""))[0] ?? null;
-  }
+    const atual = numeroCampo(form.odometroChegada);
+    const anterior = numeroCampo(visitaAnterior?.odometroChegada ?? "");
+    if (atual === null || anterior === null || atual < anterior) return null;
+    return Math.round((atual - anterior) * 10) / 10;
+  }, [form.odometroChegada, visitaAnterior]);
 
   function cancelarEdicao() {
     setEditandoId(null);
@@ -173,31 +212,33 @@ export default function VisitasPage() {
 
   function selecionarCliente(clienteId: string) {
     const cliente = clientes.find((item) => item.id === clienteId);
-    setForm((atual) => {
-      const anterior = ultimaVisitaDoDia(atual.data);
-      return {
-        ...atual,
-        clienteId,
-        representadaIds: cliente?.representadas.map((item) => item.id) ?? [],
-        origem: anterior?.destino || anterior?.clienteNome || "",
-        destino: cliente?.nome ?? "",
-        odometroInicial: anterior?.odometroFinal || "",
-        statusCliente: cliente?.status || "Ativo",
-      };
-    });
+    const anterior = encontrarVisitaAnterior(form.data, form.horaEntrada);
+    setForm((atual) => ({
+      ...atual,
+      clienteId,
+      representadaIds: cliente?.representadas.map((item) => item.id) ?? [],
+      origemClienteId: anterior?.destinoClienteId || anterior?.clienteId || "",
+      destinoClienteId: clienteId,
+      statusCliente: cliente?.status || "Ativo",
+    }));
   }
 
   function alterarData(data: string) {
-    setForm((atual) => {
-      if (editandoId || !atual.clienteId) return { ...atual, data };
-      const anterior = ultimaVisitaDoDia(data);
-      return {
-        ...atual,
-        data,
-        origem: anterior?.destino || anterior?.clienteNome || "",
-        odometroInicial: anterior?.odometroFinal || "",
-      };
-    });
+    const anterior = encontrarVisitaAnterior(data, form.horaEntrada);
+    setForm((atual) => ({
+      ...atual,
+      data,
+      origemClienteId: editandoId ? atual.origemClienteId : anterior?.destinoClienteId || anterior?.clienteId || "",
+    }));
+  }
+
+  function alterarHoraEntrada(horaEntrada: string) {
+    const anterior = encontrarVisitaAnterior(form.data, horaEntrada);
+    setForm((atual) => ({
+      ...atual,
+      horaEntrada,
+      origemClienteId: editandoId ? atual.origemClienteId : anterior?.destinoClienteId || anterior?.clienteId || "",
+    }));
   }
 
   function alterarHouveVenda(houveVenda: boolean) {
@@ -221,10 +262,9 @@ export default function VisitasPage() {
       data: visita.data,
       horaEntrada: visita.horaEntrada,
       horaSaida: visita.horaSaida,
-      odometroInicial: visita.odometroInicial,
-      odometroFinal: visita.odometroFinal,
-      origem: visita.origem,
-      destino: visita.destino,
+      odometroChegada: visita.odometroChegada,
+      origemClienteId: visita.origemClienteId,
+      destinoClienteId: visita.destinoClienteId || visita.clienteId,
       tipoContato: visita.tipoContato,
       houveVenda: visita.houveVenda,
       valorVenda: visita.houveVenda ? String(visita.valorVenda) : "",
@@ -265,10 +305,15 @@ export default function VisitasPage() {
       return;
     }
 
-    const odometroInicial = numeroCampo(form.odometroInicial);
-    const odometroFinal = numeroCampo(form.odometroFinal);
-    if (odometroInicial !== null && odometroFinal !== null && odometroFinal < odometroInicial) {
-      setErro("O odômetro final não pode ser menor que o odômetro inicial.");
+    const odometroChegada = numeroCampo(form.odometroChegada);
+    if (odometroChegada === null || odometroChegada < 0) {
+      setErro("Informe o odômetro na chegada.");
+      return;
+    }
+
+    const odometroAnterior = numeroCampo(visitaAnterior?.odometroChegada ?? "");
+    if (odometroAnterior !== null && odometroChegada < odometroAnterior) {
+      setErro("O odômetro na chegada não pode ser menor que o da visita anterior.");
       return;
     }
 
@@ -281,7 +326,10 @@ export default function VisitasPage() {
       return;
     }
 
+    const origemCliente = clientes.find((item) => item.id === form.origemClienteId) ?? null;
+    const destinoCliente = clientes.find((item) => item.id === form.destinoClienteId) ?? cliente;
     const valorVenda = numeroCampo(form.valorVenda) ?? 0;
+
     const visitaParaSalvar: VisitaDetalhada = {
       id: editandoId ?? `visita-${crypto.randomUUID()}`,
       clienteId: cliente.id,
@@ -292,11 +340,12 @@ export default function VisitasPage() {
       horaEntrada: form.horaEntrada,
       horaSaida: form.horaSaida,
       duracaoMinutos: duracaoCalculada,
-      odometroInicial: form.odometroInicial.trim(),
-      odometroFinal: form.odometroFinal.trim(),
+      odometroChegada: form.odometroChegada.trim(),
       kmTrecho: kmCalculado,
-      origem: form.origem.trim(),
-      destino: form.destino.trim() || cliente.nome,
+      origemClienteId: origemCliente?.id ?? "",
+      destinoClienteId: destinoCliente.id,
+      origem: origemCliente?.nome ?? "",
+      destino: destinoCliente.nome,
       tipoContato: form.tipoContato,
       houveVenda: form.houveVenda,
       valorVenda,
@@ -328,6 +377,8 @@ export default function VisitasPage() {
       setSalvando(false);
     }
   }
+
+  const proximaDataEhAutomatica = form.proximaAcao === "Retorno" && Boolean(diasPorFrequencia[form.frequencia]);
 
   return (
     <AppShell>
@@ -431,8 +482,8 @@ export default function VisitasPage() {
               <div className="settingsSectionTitle">
                 <MapPin size={18} />
                 <div>
-                  <strong>2. Chegada</strong>
-                  <span>Origem e odômetro inicial permitem calcular o deslocamento do trecho.</span>
+                  <strong>2. Chegada e deslocamento</strong>
+                  <span>Origem e destino usam clientes da própria base. O KM é calculado comparando o odômetro desta chegada com o da visita anterior do mesmo dia.</span>
                 </div>
               </div>
 
@@ -443,17 +494,38 @@ export default function VisitasPage() {
                 </label>
                 <label className="field">
                   Hora de entrada *
-                  <input type="time" required value={form.horaEntrada} onChange={(event) => setForm({ ...form, horaEntrada: event.target.value })} />
+                  <input type="time" required value={form.horaEntrada} onChange={(event) => alterarHoraEntrada(event.target.value)} />
                 </label>
               </div>
+
               <div className="two">
                 <label className="field">
-                  Odômetro inicial (km)
-                  <input type="number" min="0" step="0.1" value={form.odometroInicial} onChange={(event) => setForm({ ...form, odometroInicial: event.target.value })} placeholder="Ex.: 509,9" />
+                  Origem
+                  <select value={form.origemClienteId} onChange={(event) => setForm({ ...form, origemClienteId: event.target.value })}>
+                    <option value="">Início da rota / não informado</option>
+                    {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                  </select>
+                  {visitaAnterior && <small>Sugestão automática pela visita anterior.</small>}
                 </label>
                 <label className="field">
-                  Origem
-                  <input value={form.origem} onChange={(event) => setForm({ ...form, origem: event.target.value })} placeholder="De onde você veio?" />
+                  Destino *
+                  <select required value={form.destinoClienteId} onChange={(event) => setForm({ ...form, destinoClienteId: event.target.value })}>
+                    <option value="" disabled>Selecionar destino</option>
+                    {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                  </select>
+                  <small>O cliente da visita já fica selecionado por padrão.</small>
+                </label>
+              </div>
+
+              <div className="two">
+                <label className="field">
+                  Odômetro na chegada (km) *
+                  <input type="number" min="0" step="0.1" required value={form.odometroChegada} onChange={(event) => setForm({ ...form, odometroChegada: event.target.value })} placeholder="Ex.: 510,8" />
+                </label>
+                <label className="field">
+                  KM desde a visita anterior
+                  <input readOnly value={formatarKm(kmCalculado)} />
+                  {!visitaAnterior && <small>Primeira visita do dia: não há KM anterior para comparar.</small>}
                 </label>
               </div>
             </div>
@@ -463,7 +535,7 @@ export default function VisitasPage() {
                 <Car size={18} />
                 <div>
                   <strong>3. Saída</strong>
-                  <span>Duração e KM do trecho são calculados automaticamente.</span>
+                  <span>A saída registra apenas o tempo do atendimento; o odômetro continua sendo o da chegada.</span>
                 </div>
               </div>
 
@@ -477,20 +549,6 @@ export default function VisitasPage() {
                   <input readOnly value={formatarDuracao(duracaoCalculada)} />
                 </label>
               </div>
-              <div className="two">
-                <label className="field">
-                  Odômetro final (km)
-                  <input type="number" min="0" step="0.1" value={form.odometroFinal} onChange={(event) => setForm({ ...form, odometroFinal: event.target.value })} placeholder="Ex.: 510,8" />
-                </label>
-                <label className="field">
-                  KM do trecho
-                  <input readOnly value={formatarKm(kmCalculado)} />
-                </label>
-              </div>
-              <label className="field">
-                Destino
-                <input value={form.destino} onChange={(event) => setForm({ ...form, destino: event.target.value })} placeholder={clienteSelecionado?.nome || "Destino desta visita"} />
-              </label>
             </div>
 
             <div className="permissionsBlock">
@@ -567,7 +625,7 @@ export default function VisitasPage() {
                 <CalendarClock size={18} />
                 <div>
                   <strong>5. Próximas ações</strong>
-                  <span>Registre o retorno planejado e a situação do cliente no momento da visita.</span>
+                  <span>Ao escolher Retorno e uma frequência, a próxima data é calculada automaticamente a partir da data da visita.</span>
                 </div>
               </div>
 
@@ -583,13 +641,6 @@ export default function VisitasPage() {
                   </select>
                 </label>
                 <label className="field">
-                  Próxima data
-                  <input type="date" value={form.proximaData} onChange={(event) => setForm({ ...form, proximaData: event.target.value })} />
-                </label>
-              </div>
-
-              <div className="two">
-                <label className="field">
                   Frequência
                   <select value={form.frequencia} onChange={(event) => setForm({ ...form, frequencia: event.target.value })}>
                     <option value="">Não definida</option>
@@ -601,6 +652,19 @@ export default function VisitasPage() {
                     <option>60 dias</option>
                     <option>90 dias</option>
                   </select>
+                </label>
+              </div>
+
+              <div className="two">
+                <label className="field">
+                  Próxima data
+                  <input
+                    type="date"
+                    value={form.proximaData}
+                    readOnly={proximaDataEhAutomatica}
+                    onChange={(event) => setForm({ ...form, proximaData: event.target.value })}
+                  />
+                  {proximaDataEhAutomatica && <small>Calculada automaticamente pela frequência selecionada.</small>}
                 </label>
                 <label className="field">
                   Status do cliente *
@@ -676,12 +740,9 @@ export default function VisitasPage() {
                 </div>
 
                 <small>Contato: {visita.tipoContato}</small>
-                {(visita.origem || visita.destino) && (
-                  <small>Rota: {visita.origem || "Origem não informada"} → {visita.destino || visita.clienteNome}{visita.kmTrecho !== null ? ` • ${formatarKm(visita.kmTrecho)}` : ""}</small>
-                )}
-                {(visita.odometroInicial || visita.odometroFinal) && (
-                  <small>Odômetro: {visita.odometroInicial || "—"} → {visita.odometroFinal || "—"} km</small>
-                )}
+                <small>Rota: {visita.origem || "Início da rota"} → {visita.destino || visita.clienteNome}</small>
+                {visita.odometroChegada && <small>Odômetro na chegada: {visita.odometroChegada} km</small>}
+                {visita.kmTrecho !== null && <small>Deslocamento desde a visita anterior: {formatarKm(visita.kmTrecho)}</small>}
                 <small>
                   {visita.houveVenda
                     ? `Venda: ${formatarMoeda(visita.valorVenda)}${visita.origemVenda ? ` • ${visita.origemVenda}` : ""}`
