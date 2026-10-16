@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, ClipboardCheck, ShieldCheck, Users } from "lucide-react";
+import { Building2, ClipboardCheck, Eye, ShieldCheck, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
 import AppShell from "../components/AppShell";
+import { definirRepresentanteAdministrado } from "../lib/adminContext";
 import { carregarResumoAdmin, listarUsuariosAdmin, type ResumoAdmin, type UsuarioAdmin } from "../lib/admin";
 import { carregarPerfilAtual } from "../lib/perfil";
 
@@ -14,6 +16,7 @@ const resumoInicial: ResumoAdmin = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
   const [resumo, setResumo] = useState<ResumoAdmin>(resumoInicial);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -54,13 +57,24 @@ export default function AdminPage() {
     };
   }, []);
 
+  function acessarPainel(usuario: UsuarioAdmin) {
+    definirRepresentanteAdministrado({
+      userId: usuario.userId,
+      nome: usuario.nome,
+      nomeRepresentacao: usuario.nomeRepresentacao,
+      email: usuario.email,
+    });
+    router.push("/");
+    router.refresh();
+  }
+
   return (
     <AppShell>
       <header className="pageHeader">
         <div>
           <p className="eyebrow">ADMINISTRAÇÃO</p>
           <h1>Painel do Admin</h1>
-          <p>Visão geral dos usuários e da utilização do Torres Gestor Comercial.</p>
+          <p>Escolha um representante para abrir e administrar o painel operacional dele.</p>
         </div>
       </header>
 
@@ -99,7 +113,7 @@ export default function AdminPage() {
           <section className="panel adminPanel">
             <div className="panelTitle">
               <div>
-                <p className="eyebrow">USUÁRIOS</p>
+                <p className="eyebrow">REPRESENTANTES</p>
                 <h2>Contas do sistema</h2>
               </div>
               <span className="tag"><ShieldCheck size={13} /> Acesso administrador</span>
@@ -116,6 +130,7 @@ export default function AdminPage() {
                     <th>Clientes</th>
                     <th>Visitas</th>
                     <th>Cadastro</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -135,6 +150,12 @@ export default function AdminPage() {
                       <td>{usuario.clientes}</td>
                       <td>{usuario.visitas}</td>
                       <td>{new Date(usuario.criadoEm).toLocaleDateString("pt-BR")}</td>
+                      <td>
+                        <button className="secondary adminAccessButton" type="button" onClick={() => acessarPainel(usuario)}>
+                          <Eye size={15} />
+                          Acessar painel
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
