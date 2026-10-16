@@ -123,8 +123,8 @@ export default function EquipePage() {
     event.preventDefault();
     if (salvando) return;
 
-    if (!editando && form.senhaTemporaria.length < 8) {
-      setErro("Defina uma senha temporária com pelo menos 8 caracteres.");
+    if (!editando && form.senhaTemporaria.length > 0 && form.senhaTemporaria.length < 8) {
+      setErro("Se informar uma senha temporária, use pelo menos 8 caracteres.");
       return;
     }
 
@@ -153,7 +153,9 @@ export default function EquipePage() {
         });
         setPrepostos((lista) => [criado, ...lista]);
         setMensagem(
-          `Acesso criado para ${criado.email}. Entregue a senha temporária ao preposto. No primeiro login ele será obrigado a criar uma senha definitiva.`,
+          criado.loginExistente
+            ? `${criado.nome} foi vinculado a esta operação usando o login que ele já possuía. A senha dele não foi alterada.`
+            : `Acesso criado para ${criado.email}. Entregue a senha temporária ao preposto. No primeiro login ele será obrigado a criar uma senha definitiva.`,
         );
       }
       fechar();
@@ -170,7 +172,7 @@ export default function EquipePage() {
         <div>
           <p className="eyebrow">GESTÃO DA EQUIPE</p>
           <h1>Prepostos</h1>
-          <p>Crie os acessos da sua equipe, controle permissões e entre na operação individual de cada vendedor.</p>
+          <p>Vincule vendedores à sua operação, controle permissões e entre no painel individual de cada preposto.</p>
         </div>
         <button className="primary" type="button" onClick={mostrarForm ? fechar : novo}>
           {mostrarForm ? <X size={18} /> : <Plus size={18} />}
@@ -185,8 +187,8 @@ export default function EquipePage() {
         <form className="panel formPanel" onSubmit={salvar}>
           <div className="panelTitle">
             <div>
-              <p className="eyebrow">{editando ? "ALTERAR ACESSO" : "NOVO ACESSO"}</p>
-              <h2>{editando ? "Editar preposto" : "Cadastrar preposto"}</h2>
+              <p className="eyebrow">{editando ? "ALTERAR VÍNCULO" : "NOVO VÍNCULO"}</p>
+              <h2>{editando ? "Editar preposto" : "Adicionar preposto à operação"}</h2>
             </div>
           </div>
 
@@ -209,10 +211,11 @@ export default function EquipePage() {
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
                 placeholder="preposto@exemplo.com"
               />
+              {!editando && <small>Se esse e-mail já for de um preposto do sistema, o mesmo login será reutilizado.</small>}
             </label>
             {editando ? (
               <label className="field">
-                Status
+                Status nesta operação
                 <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as "ativo" | "inativo" })}>
                   <option value="ativo">Ativo</option>
                   <option value="inativo">Inativo</option>
@@ -224,12 +227,11 @@ export default function EquipePage() {
                 <input
                   type="password"
                   minLength={8}
-                  required
                   value={form.senhaTemporaria}
                   onChange={(event) => setForm({ ...form, senhaTemporaria: event.target.value })}
-                  placeholder="Mínimo de 8 caracteres"
+                  placeholder="Somente para novo login"
                 />
-                <small>O preposto trocará essa senha obrigatoriamente no primeiro login.</small>
+                <small>Deixe em branco se o preposto já tiver login. Para um novo usuário, use pelo menos 8 caracteres.</small>
               </label>
             )}
           </div>
@@ -238,8 +240,8 @@ export default function EquipePage() {
             <div className="settingsSectionTitle">
               <ShieldCheck size={18} />
               <div>
-                <strong>Permissões</strong>
-                <span>Configurações, Equipe e Administração nunca são liberadas para prepostos.</span>
+                <strong>Permissões desta operação</strong>
+                <span>Estas permissões valem somente para a sua representação. Outros vínculos do preposto permanecem isolados.</span>
               </div>
             </div>
 
@@ -273,7 +275,7 @@ export default function EquipePage() {
 
           <div className="formActions">
             <button className="secondary" type="button" onClick={fechar}>Cancelar</button>
-            <button className="primary" type="submit" disabled={salvando}>{salvando ? "Salvando..." : editando ? "Salvar alterações" : "Criar login do preposto"}</button>
+            <button className="primary" type="submit" disabled={salvando}>{salvando ? "Salvando..." : editando ? "Salvar alterações" : "Adicionar à operação"}</button>
           </div>
         </form>
       )}
@@ -282,12 +284,12 @@ export default function EquipePage() {
         <div className="panelTitle">
           <div>
             <p className="eyebrow">EQUIPE COMERCIAL</p>
-            <h2>{carregando ? "Carregando equipe..." : `${prepostos.length} prepostos cadastrados`}</h2>
+            <h2>{carregando ? "Carregando equipe..." : `${prepostos.length} prepostos vinculados`}</h2>
           </div>
         </div>
 
         {!carregando && prepostos.length === 0 && (
-          <div className="emptyState">Nenhum preposto cadastrado ainda.</div>
+          <div className="emptyState">Nenhum preposto vinculado a esta operação ainda.</div>
         )}
 
         <div className="teamList">
@@ -308,12 +310,12 @@ export default function EquipePage() {
                 type="button"
                 onClick={() => acessarPainel(preposto)}
                 disabled={!preposto.userId || preposto.status !== "ativo"}
-                title={preposto.status === "ativo" ? "Acessar painel do preposto" : "Ative o preposto para acessar o painel"}
+                title={preposto.status === "ativo" ? "Acessar painel do preposto nesta operação" : "Ative o preposto para acessar o painel"}
               >
                 <Eye size={15} />
                 Acessar painel
               </button>
-              <button className="iconBtn" type="button" onClick={() => editar(preposto)} title="Editar preposto">
+              <button className="iconBtn" type="button" onClick={() => editar(preposto)} title="Editar vínculo do preposto">
                 <Pencil size={16} />
               </button>
             </article>
