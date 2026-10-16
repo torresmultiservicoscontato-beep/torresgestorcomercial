@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, Pencil, X } from "lucide-react";
 import AppShell from "../components/AppShell";
-import { Cliente, Visita, carregarClientes, carregarVisitas, criarVisita } from "../lib/data";
+import { Cliente, Visita, atualizarVisita, carregarClientes, carregarVisitas, criarVisita } from "../lib/data";
 
 function hojeLocal() {
   const agora = new Date();
@@ -13,19 +13,24 @@ function hojeLocal() {
   return `${ano}-${mes}-${dia}`;
 }
 
-export default function VisitasPage() {
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [visitas, setVisitas] = useState<Visita[]>([]);
-  const [salvando, setSalvando] = useState(false);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState("");
-  const [form, setForm] = useState({
+function formInicial() {
+  return {
     clienteId: "",
     data: hojeLocal(),
     resultado: "Sem venda",
     odometro: "",
     observacao: "",
-  });
+  };
+}
+
+export default function VisitasPage() {
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [visitas, setVisitas] = useState<Visita[]>([]);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [form, setForm] = useState(formInicial());
 
   useEffect(() => {
     let ativo = true;
@@ -54,6 +59,23 @@ export default function VisitasPage() {
     [visitas],
   );
 
+  function cancelarEdicao() {
+    setEditandoId(null);
+    setForm(formInicial());
+  }
+
+  function editar(visita: Visita) {
+    setEditandoId(visita.id);
+    setForm({
+      clienteId: visita.clienteId,
+      data: visita.data,
+      resultado: visita.resultado,
+      odometro: visita.odometro,
+      observacao: visita.observacao,
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function registrarVisita(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (salvando) return;
@@ -64,8 +86,8 @@ export default function VisitasPage() {
       return;
     }
 
-    const novaVisita: Visita = {
-      id: `visita-${crypto.randomUUID()}`,
+    const visitaParaSalvar: Visita = {
+      id: editandoId ?? `visita-${crypto.randomUUID()}`,
       clienteId: cliente.id,
       clienteNome: cliente.nome,
       data: form.data,
@@ -78,15 +100,16 @@ export default function VisitasPage() {
     setErro("");
 
     try {
-      const visitaSalva = await criarVisita(novaVisita);
-      setVisitas((lista) => [visitaSalva, ...lista]);
-      setForm({
-        clienteId: "",
-        data: hojeLocal(),
-        resultado: "Sem venda",
-        odometro: "",
-        observacao: "",
-      });
+      const visitaSalva = editandoId
+        ? await atualizarVisita(visitaParaSalvar)
+        : await criarVisita(visitaParaSalvar);
+
+      setVisitas((lista) =>
+        editandoId
+          ? lista.map((visita) => (visita.id === visitaSalva.id ? visitaSalva : visita))
+          : [visitaSalva, ...lista],
+      );
+      cancelarEdicao();
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível registrar a visita.");
     } finally {
@@ -100,7 +123,7 @@ export default function VisitasPage() {
         <div>
           <p className="eyebrow">ROTINA DE CAMPO</p>
           <h1>Visitas</h1>
-          <p>Registre cada atendimento e mantenha o histórico comercial organizado.</p>
+          <p>Registre e altere os atendimentos do usuário operacional selecionado.</p>
           <span className="tag">Banco online</span>
         </div>
       </header>
@@ -109,8 +132,15 @@ export default function VisitasPage() {
 
       <div className="grid visitsGrid">
         <form className="panel visit" onSubmit={registrarVisita}>
-          <p className="eyebrow">NOVO REGISTRO</p>
-          <h2>Registrar visita</h2>
+          <p className="eyebrow">{editandoId ? "ALTERAÇÃO" : "NOVO REGISTRO"}</p>
+          <div className="panelTitle">
+            <h2>{editandoId ? "Editar visita" : "Registrar visita"}</h2>
+            {editandoId && (
+              <button className="iconBtn" type="button" onClick={cancelarEdicao} title="Cancelar edição">
+                <X size={16} />
+              </button>
+            )}
+          </div>
 
           <label className="field">
             Cliente
@@ -177,7 +207,7 @@ export default function VisitasPage() {
           </label>
 
           <button className="primary wide" type="submit" disabled={salvando || carregando || clientes.length === 0}>
-            <ClipboardCheck size={18} /> {salvando ? "Registrando..." : "Registrar visita"}
+            <ClipboardCheck size={18} /> {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Registrar visita"}
           </button>
         </form>
 
@@ -196,7 +226,12 @@ export default function VisitasPage() {
                   <strong>{visita.clienteNome}</strong>
                   <span>{visita.data.split("-").reverse().join("/")}</span>
                 </div>
-                <span className="tag">{visita.resultado}</span>
+                <div className="visitItemActions">
+                  <span className="tag">{visita.resultado}</span>
+                  <button className="iconBtn editDataButton" type="button" onClick={() => editar(visita)} title="Editar visita">
+                    <Pencil size={14} />
+                  </button>
+                </div>
                 {visita.odometro && <small>Odômetro: {visita.odometro}</small>}
                 {visita.observacao && <p>{visita.observacao}</p>}
               </article>
