@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { Cliente, carregarClientes, criarCliente } from "../lib/data";
-import { carregarPerfilAtual } from "../lib/perfil";
+import { carregarPerfilOperacional } from "../lib/perfil";
 
 const formInicial = {
   nome: "",
@@ -28,7 +28,7 @@ export default function ClientesPage() {
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarPerfilAtual()])
+    void Promise.all([carregarClientes(), carregarPerfilOperacional()])
       .then(([listaClientes, perfil]) => {
         if (!ativo) return;
         setClientes(listaClientes);
@@ -102,7 +102,7 @@ export default function ClientesPage() {
         <div>
           <p className="eyebrow">CARTEIRA COMERCIAL</p>
           <h1>Clientes</h1>
-          <p>Cadastre, localize e acompanhe sua carteira de clientes.</p>
+          <p>Cadastre, localize e acompanhe a carteira do usuário operacional selecionado.</p>
           <span className="tag">Banco online</span>
         </div>
         <button className="primary" onClick={() => setMostrarForm((valor) => !valor)}>
