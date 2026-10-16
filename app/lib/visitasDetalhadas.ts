@@ -16,9 +16,10 @@ export type VisitaDetalhada = {
   horaEntrada: string;
   horaSaida: string;
   duracaoMinutos: number | null;
-  odometroInicial: string;
-  odometroFinal: string;
+  odometroChegada: string;
   kmTrecho: number | null;
+  origemClienteId: string;
+  destinoClienteId: string;
   origem: string;
   destino: string;
   tipoContato: TipoContato;
@@ -44,9 +45,10 @@ type VisitaRow = {
   hora_entrada: string | null;
   hora_saida: string | null;
   duracao_minutos: number | null;
-  odometro_inicial: number | string | null;
-  odometro_final: number | string | null;
+  odometro_chegada: number | string | null;
   km_trecho: number | string | null;
+  origem_cliente_id: string | null;
+  destino_cliente_id: string | null;
   origem: string | null;
   destino: string | null;
   tipo_contato: string | null;
@@ -150,8 +152,8 @@ function horaCurta(valor: string | null) {
 function numeroTexto(valor: number | string | null | undefined) {
   if (valor === null || valor === undefined || valor === "") return "";
   const texto = String(valor).replace(/\s*km\s*/gi, "").trim().replace(",", ".");
-  const numero = Number(texto);
-  return Number.isFinite(numero) ? String(numero) : "";
+  const convertido = Number(texto);
+  return Number.isFinite(convertido) ? String(convertido) : "";
 }
 
 function numero(valor: number | string | null | undefined) {
@@ -170,9 +172,10 @@ function mapear(row: VisitaRow, representadas: RepresentadaOperacional[]): Visit
     horaEntrada: horaCurta(row.hora_entrada),
     horaSaida: horaCurta(row.hora_saida),
     duracaoMinutos: row.duracao_minutos === null ? null : Number(row.duracao_minutos),
-    odometroInicial: numeroTexto(row.odometro_inicial),
-    odometroFinal: numeroTexto(row.odometro_final) || numeroTexto(row.odometro),
+    odometroChegada: numeroTexto(row.odometro_chegada) || numeroTexto(row.odometro),
     kmTrecho: row.km_trecho === null ? null : Number(row.km_trecho),
+    origemClienteId: row.origem_cliente_id ?? "",
+    destinoClienteId: row.destino_cliente_id ?? row.cliente_id,
     origem: row.origem ?? "",
     destino: row.destino || row.cliente_nome,
     tipoContato: (row.tipo_contato || "Presencial") as TipoContato,
@@ -192,7 +195,7 @@ export async function carregarVisitasDetalhadas(): Promise<VisitaDetalhada[]> {
 
   let consulta = cliente
     .from("visitas")
-    .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao,representada_id,hora_entrada,hora_saida,duracao_minutos,odometro_inicial,odometro_final,km_trecho,origem,destino,tipo_contato,houve_venda,valor_venda,origem_venda,proxima_acao,proxima_data,frequencia,status_cliente")
+    .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao,representada_id,hora_entrada,hora_saida,duracao_minutos,odometro_chegada,km_trecho,origem,destino,origem_cliente_id,destino_cliente_id,tipo_contato,houve_venda,valor_venda,origem_venda,proxima_acao,proxima_data,frequencia,status_cliente")
     .eq("user_id", userIdAlvo);
 
   if (filtroResponsavelUserId) consulta = consulta.eq("responsavel_user_id", filtroResponsavelUserId);
@@ -219,7 +222,7 @@ function decimalOuNull(valor: string) {
 async function salvar(visita: VisitaDetalhada, acao: "cadastrar" | "editar") {
   const { cliente, userIdAlvo, responsavelUserId } = await resolverContexto(acao);
 
-  const { data, error } = await cliente.rpc("salvar_visita_completa", {
+  const { data, error } = await cliente.rpc("salvar_visita_completa_v2", {
     p_id: visita.id,
     p_titular_user_id: userIdAlvo,
     p_responsavel_user_id: responsavelUserId,
@@ -229,10 +232,9 @@ async function salvar(visita: VisitaDetalhada, acao: "cadastrar" | "editar") {
     p_representadas: visita.representadas.map((item) => item.id),
     p_hora_entrada: visita.horaEntrada || null,
     p_hora_saida: visita.horaSaida || null,
-    p_odometro_inicial: decimalOuNull(visita.odometroInicial),
-    p_odometro_final: decimalOuNull(visita.odometroFinal),
-    p_origem: visita.origem,
-    p_destino: visita.destino,
+    p_odometro_chegada: decimalOuNull(visita.odometroChegada),
+    p_origem_cliente_id: visita.origemClienteId || null,
+    p_destino_cliente_id: visita.destinoClienteId || visita.clienteId,
     p_tipo_contato: visita.tipoContato,
     p_houve_venda: visita.houveVenda,
     p_valor_venda: visita.houveVenda ? visita.valorVenda : 0,
