@@ -38,6 +38,25 @@ type PerfilRow = {
   papel: PapelUsuario;
 };
 
+function chaveRepresentada(valor: string) {
+  return valor
+    .trim()
+    .toLocaleLowerCase("pt-BR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function normalizarListaRepresentadas(itens: string[]) {
+  const unicas = new Map<string, string>();
+  for (const item of itens) {
+    const nome = item.trim();
+    const chave = chaveRepresentada(nome);
+    if (nome && chave && !unicas.has(chave)) unicas.set(chave, nome);
+  }
+  return Array.from(unicas.values());
+}
+
 async function buscarPerfil(userId: string): Promise<PerfilComercial | null> {
   if (!supabase) return null;
 
@@ -161,22 +180,40 @@ export async function salvarPerfilAtual(
 
   if (perfilError) throw new Error(`Falha ao salvar perfil: ${perfilError.message}`);
 
-  const representadas = Array.from(
-    new Set(perfil.representadas.map((item) => item.trim()).filter(Boolean)),
-  );
-
-  const { error: deleteError } = await supabase
+  const desejadas = normalizarListaRepresentadas(perfil.representadas);
+  const { data: atuais, error: atuaisError } = await supabase
     .from("perfil_representadas")
-    .delete()
+    .select("nome")
     .eq("user_id", user.id);
 
-  if (deleteError) {
-    throw new Error(`Falha ao atualizar representadas: ${deleteError.message}`);
+  if (atuaisError) throw new Error(`Falha ao carregar representadas atuais: ${atuaisError.message}`);
+
+  const atuaisPorChave = new Map((atuais ?? []).map((item) => [chaveRepresentada(item.nome), item.nome]));
+  const desejadasPorChave = new Map(desejadas.map((nome) => [chaveRepresentada(nome), nome]));
+
+  const removidas = Array.from(atuaisPorChave.entries())
+    .filter(([chave]) => !desejadasPorChave.has(chave))
+    .map(([, nome]) => nome);
+
+  const adicionadas = Array.from(desejadasPorChave.entries())
+    .filter(([chave]) => !atuaisPorChave.has(chave))
+    .map(([, nome]) => nome);
+
+  if (removidas.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("perfil_representadas")
+      .delete()
+      .eq("user_id", user.id)
+      .in("nome", removidas);
+
+    if (deleteError) {
+      throw new Error(`Falha ao remover representada: ${deleteError.message}`);
+    }
   }
 
-  if (representadas.length > 0) {
+  if (adicionadas.length > 0) {
     const { error: insertError } = await supabase.from("perfil_representadas").insert(
-      representadas.map((nome) => ({ user_id: user.id, nome })),
+      adicionadas.map((nome) => ({ user_id: user.id, nome })),
     );
 
     if (insertError) {
