@@ -4,7 +4,16 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Building2, ClipboardCheck, Pencil, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
-import { Cliente, Visita, atualizarVisita, carregarClientes, carregarVisitas, criarVisita } from "../lib/data";
+import {
+  Cliente,
+  Visita,
+  atualizarVisita,
+  carregarClientes,
+  carregarRepresentadasOperacionais,
+  carregarVisitas,
+  criarVisita,
+  type RepresentadaOperacional,
+} from "../lib/data";
 
 function hojeLocal() {
   const agora = new Date();
@@ -28,6 +37,7 @@ function formInicial() {
 export default function VisitasPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [visitas, setVisitas] = useState<Visita[]>([]);
+  const [representadasOperacionais, setRepresentadasOperacionais] = useState<RepresentadaOperacional[]>([]);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
@@ -39,11 +49,17 @@ export default function VisitasPage() {
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarVisitas(), carregarAcessoAtual()])
-      .then(([listaClientes, listaVisitas, acesso]) => {
+    void Promise.all([
+      carregarClientes(),
+      carregarVisitas(),
+      carregarRepresentadasOperacionais(),
+      carregarAcessoAtual(),
+    ])
+      .then(([listaClientes, listaVisitas, listaRepresentadas, acesso]) => {
         if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
+        setRepresentadasOperacionais(listaRepresentadas);
         setPodeCadastrar(pode(acesso, "visitas", "cadastrar"));
         setPodeEditar(pode(acesso, "visitas", "editar"));
       })
@@ -70,6 +86,11 @@ export default function VisitasPage() {
     [clientes, form.clienteId],
   );
 
+  const representadasDoClienteIds = useMemo(
+    () => new Set(clienteSelecionado?.representadas.map((item) => item.id) ?? []),
+    [clienteSelecionado],
+  );
+
   function cancelarEdicao() {
     setEditandoId(null);
     setForm(formInicial());
@@ -86,7 +107,7 @@ export default function VisitasPage() {
 
   function selecionarCliente(clienteId: string) {
     const cliente = clientes.find((item) => item.id === clienteId);
-    const idsPadrao = cliente?.representadas.length === 1 ? [cliente.representadas[0].id] : [];
+    const idsPadrao = cliente?.representadas.map((item) => item.id) ?? [];
     setForm((atual) => ({ ...atual, clienteId, representadaIds: idsPadrao }));
   }
 
@@ -119,9 +140,12 @@ export default function VisitasPage() {
       return;
     }
 
-    const representadasSelecionadas = cliente.representadas.filter((item) => form.representadaIds.includes(item.id));
+    const representadasSelecionadas = representadasOperacionais.filter((item) =>
+      form.representadaIds.includes(item.id),
+    );
+
     if (representadasSelecionadas.length !== form.representadaIds.length) {
-      setErro("A visita só pode usar representadas vinculadas ao cliente selecionado.");
+      setErro("Uma ou mais representadas selecionadas não estão disponíveis nesta operação.");
       return;
     }
 
@@ -204,15 +228,21 @@ export default function VisitasPage() {
                   <Building2 size={18} />
                   <div>
                     <strong>Representadas desta visita</strong>
-                    <span>Escolha uma ou mais dentre as representadas vinculadas a {clienteSelecionado.nome}.</span>
+                    <span>
+                      As representadas já cadastradas para {clienteSelecionado.nome} vêm marcadas em azul. As demais da operação ficam disponíveis para uma oportunidade pontual nesta visita.
+                    </span>
                   </div>
                 </div>
 
                 <div className="representadasChecklist">
-                  {clienteSelecionado.representadas.map((representada) => {
+                  {representadasOperacionais.map((representada) => {
                     const selecionada = form.representadaIds.includes(representada.id);
+                    const cadastradaNoCliente = representadasDoClienteIds.has(representada.id);
                     return (
-                      <label className="representadaOption" key={representada.id}>
+                      <label
+                        className={selecionada ? "representadaOption selected" : "representadaOption"}
+                        key={representada.id}
+                      >
                         <input
                           type="checkbox"
                           checked={selecionada}
@@ -220,7 +250,15 @@ export default function VisitasPage() {
                         />
                         <span>
                           <strong>{representada.nome}</strong>
-                          <small>{selecionada ? "Incluída nesta visita" : "Não selecionada"}</small>
+                          <small>
+                            {cadastradaNoCliente
+                              ? selecionada
+                                ? "Cadastrada no cliente • incluída nesta visita"
+                                : "Cadastrada no cliente • desmarcada nesta visita"
+                              : selecionada
+                                ? "Oportunidade pontual • incluída nesta visita"
+                                : "Disponível nesta operação"}
+                          </small>
                         </span>
                       </label>
                     );
