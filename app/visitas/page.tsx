@@ -67,7 +67,9 @@ function formatarDuracao(minutos: number | null) {
 }
 
 function numeroCampo(valor: string) {
-  const convertido = Number(valor.replace(",", "."));
+  const limpo = valor.trim().replace(",", ".");
+  if (!limpo) return null;
+  const convertido = Number(limpo);
   return Number.isFinite(convertido) ? convertido : null;
 }
 
