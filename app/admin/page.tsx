@@ -7,6 +7,7 @@ import AppShell from "../components/AppShell";
 import { definirRepresentanteAdministrado } from "../lib/adminContext";
 import { carregarResumoAdmin, listarUsuariosAdmin, type ResumoAdmin, type UsuarioAdmin } from "../lib/admin";
 import { carregarPerfilAtual } from "../lib/perfil";
+import { limparPrepostoAdministrado } from "../lib/prepostoContext";
 
 const resumoInicial: ResumoAdmin = {
   usuarios: 0,
@@ -58,6 +59,7 @@ export default function AdminPage() {
   }, []);
 
   function acessarPainel(usuario: UsuarioAdmin) {
+    limparPrepostoAdministrado();
     definirRepresentanteAdministrado({
       userId: usuario.userId,
       nome: usuario.nome,
@@ -86,9 +88,9 @@ export default function AdminPage() {
           <section className="stats adminStats">
             <article>
               <Users size={20} />
-              <span>Usuários</span>
+              <span>Representantes</span>
               <strong>{resumo.usuarios}</strong>
-              <small>Contas cadastradas</small>
+              <small>Contas titulares cadastradas</small>
             </article>
             <article>
               <Building2 size={20} />
