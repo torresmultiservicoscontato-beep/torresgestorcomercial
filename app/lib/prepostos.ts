@@ -17,6 +17,7 @@ export type Preposto = {
   permissoes: PermissoesPreposto;
   criadoEm: string;
   atualizadoEm: string;
+  loginExistente?: boolean;
 };
 
 type PrepostoRow = {
@@ -93,15 +94,12 @@ export async function criarPreposto(input: {
   nome: string;
   email: string;
   whatsapp: string;
-  senhaTemporaria: string;
+  senhaTemporaria?: string;
   permissoes: PermissoesPreposto;
 }): Promise<Preposto> {
   if (!supabase) throw new Error("Supabase não configurado.");
 
   const titularUserId = await resolverTitular();
-  const authIsolado = criarSupabaseIsolado();
-  if (!authIsolado) throw new Error("Não foi possível iniciar o cadastro do login.");
-
   const email = input.email.trim().toLowerCase();
 
   const { data: existente } = await supabase
@@ -111,7 +109,29 @@ export async function criarPreposto(input: {
     .eq("email", email)
     .maybeSingle();
 
-  if (existente) throw new Error("Já existe um preposto com esse e-mail nesta equipe.");
+  if (existente) throw new Error("Este preposto já pertence a esta equipe.");
+
+  const { data: vinculoExistente, error: vinculoError } = await supabase.rpc("vincular_preposto_existente", {
+    p_titular_user_id: titularUserId,
+    p_email: email,
+    p_nome: input.nome.trim(),
+    p_whatsapp: input.whatsapp.trim(),
+    p_permissoes: input.permissoes,
+  });
+
+  if (vinculoError) throw new Error(`Falha ao vincular preposto: ${vinculoError.message}`);
+
+  const vinculo = Array.isArray(vinculoExistente) ? vinculoExistente[0] : vinculoExistente;
+  if (vinculo) {
+    return { ...mapear(vinculo as PrepostoRow), loginExistente: true };
+  }
+
+  if (!input.senhaTemporaria || input.senhaTemporaria.length < 8) {
+    throw new Error("Este e-mail ainda não possui login de preposto. Defina uma senha temporária com pelo menos 8 caracteres.");
+  }
+
+  const authIsolado = criarSupabaseIsolado();
+  if (!authIsolado) throw new Error("Não foi possível iniciar o cadastro do login.");
 
   const { data: authData, error: authError } = await authIsolado.auth.signUp({
     email,
@@ -126,10 +146,12 @@ export async function criarPreposto(input: {
   });
 
   if (authError || !authData.user || authData.user.identities?.length === 0) {
-    const mensagem = authError?.message?.toLowerCase().includes("already") || authData.user?.identities?.length === 0
-      ? "Já existe uma conta com esse e-mail."
-      : authError?.message ?? "Não foi possível criar o login do preposto.";
-    throw new Error(mensagem);
+    const contaExistente = authError?.message?.toLowerCase().includes("already") || authData.user?.identities?.length === 0;
+    throw new Error(
+      contaExistente
+        ? "Já existe uma conta com esse e-mail, mas ela não está disponível como preposto. Confira o e-mail informado."
+        : authError?.message ?? "Não foi possível criar o login do preposto.",
+    );
   }
 
   const { data, error } = await supabase
@@ -147,7 +169,7 @@ export async function criarPreposto(input: {
     .single();
 
   if (error) throw new Error(`Login criado, mas o vínculo com a equipe falhou: ${error.message}`);
-  return mapear(data as PrepostoRow);
+  return { ...mapear(data as PrepostoRow), loginExistente: false };
 }
 
 export async function atualizarPreposto(preposto: Preposto): Promise<Preposto> {
