@@ -1,10 +1,11 @@
 import { obterRepresentanteAdministrado } from "./adminContext";
 import { carregarPerfilAtual } from "./perfil";
-import { criarSupabaseIsolado, supabase } from "./supabase";
+import { supabase } from "./supabase";
 
 export type AcaoPermissao = "visualizar" | "cadastrar" | "editar";
 export type ModuloPermissao = "clientes" | "rotas" | "visitas" | "vendas" | "agenda" | "relatorios";
 export type PermissoesPreposto = Record<ModuloPermissao, Record<AcaoPermissao, boolean>>;
+export type StatusVinculoPreposto = "pendente" | "ativo" | "inativo" | "recusado";
 
 export type Preposto = {
   id: string;
@@ -13,11 +14,20 @@ export type Preposto = {
   nome: string;
   email: string;
   whatsapp: string;
-  status: "ativo" | "inativo";
+  status: StatusVinculoPreposto;
   permissoes: PermissoesPreposto;
   criadoEm: string;
   atualizadoEm: string;
-  loginExistente?: boolean;
+};
+
+export type VinculoPreposto = {
+  id: string;
+  titularUserId: string;
+  nomeRepresentante: string;
+  nomeRepresentacao: string;
+  status: StatusVinculoPreposto;
+  permissoes: PermissoesPreposto;
+  criadoEm: string;
 };
 
 type PrepostoRow = {
@@ -27,10 +37,20 @@ type PrepostoRow = {
   nome: string;
   email: string;
   whatsapp: string;
-  status: "ativo" | "inativo";
+  status: StatusVinculoPreposto;
   permissoes: PermissoesPreposto;
   created_at: string;
   updated_at: string;
+};
+
+type VinculoRow = {
+  id: string;
+  titular_user_id: string;
+  nome_representante: string;
+  nome_representacao: string;
+  status: StatusVinculoPreposto;
+  permissoes: PermissoesPreposto;
+  created_at: string;
 };
 
 export const permissoesPadrao: PermissoesPreposto = {
@@ -68,9 +88,7 @@ async function resolverTitular() {
   if (error || !user) throw new Error("Sua sessão expirou. Entre novamente.");
 
   const perfil = await carregarPerfilAtual();
-  if (!perfil) {
-    throw new Error("Somente o representante titular pode administrar a equipe.");
-  }
+  if (!perfil) throw new Error("Somente o representante titular pode administrar a equipe.");
 
   const administrado = perfil.papel === "admin" ? obterRepresentanteAdministrado() : null;
   return administrado?.userId ?? user.id;
@@ -84,104 +102,41 @@ export async function listarPrepostos(): Promise<Preposto[]> {
     .from("prepostos")
     .select("id,titular_user_id,user_id,nome,email,whatsapp,status,permissoes,created_at,updated_at")
     .eq("titular_user_id", titularUserId)
+    .neq("status", "recusado")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Falha ao carregar equipe: ${error.message}`);
   return ((data ?? []) as PrepostoRow[]).map(mapear);
 }
 
-export async function criarPreposto(input: {
-  nome: string;
+export async function solicitarVinculoPreposto(input: {
   email: string;
-  whatsapp: string;
-  senhaTemporaria?: string;
   permissoes: PermissoesPreposto;
 }): Promise<Preposto> {
   if (!supabase) throw new Error("Supabase não configurado.");
-
   const titularUserId = await resolverTitular();
-  const email = input.email.trim().toLowerCase();
 
-  const { data: existente } = await supabase
-    .from("prepostos")
-    .select("id")
-    .eq("titular_user_id", titularUserId)
-    .eq("email", email)
-    .maybeSingle();
-
-  if (existente) throw new Error("Este preposto já pertence a esta equipe.");
-
-  const { data: vinculoExistente, error: vinculoError } = await supabase.rpc("vincular_preposto_existente", {
+  const { data, error } = await supabase.rpc("solicitar_vinculo_preposto", {
     p_titular_user_id: titularUserId,
-    p_email: email,
-    p_nome: input.nome.trim(),
-    p_whatsapp: input.whatsapp.trim(),
+    p_email: input.email.trim().toLowerCase(),
     p_permissoes: input.permissoes,
   });
 
-  if (vinculoError) throw new Error(`Falha ao vincular preposto: ${vinculoError.message}`);
-
-  const vinculo = Array.isArray(vinculoExistente) ? vinculoExistente[0] : vinculoExistente;
-  if (vinculo) {
-    return { ...mapear(vinculo as PrepostoRow), loginExistente: true };
-  }
-
-  if (!input.senhaTemporaria || input.senhaTemporaria.length < 8) {
-    throw new Error("Este e-mail ainda não possui login de preposto. Defina uma senha temporária com pelo menos 8 caracteres.");
-  }
-
-  const authIsolado = criarSupabaseIsolado();
-  if (!authIsolado) throw new Error("Não foi possível iniciar o cadastro do login.");
-
-  const { data: authData, error: authError } = await authIsolado.auth.signUp({
-    email,
-    password: input.senhaTemporaria,
-    options: {
-      emailRedirectTo: `${window.location.origin}/login`,
-      data: {
-        must_change_password: true,
-        tipo_acesso: "preposto",
-      },
-    },
-  });
-
-  if (authError || !authData.user || authData.user.identities?.length === 0) {
-    const contaExistente = authError?.message?.toLowerCase().includes("already") || authData.user?.identities?.length === 0;
-    throw new Error(
-      contaExistente
-        ? "Já existe uma conta com esse e-mail, mas ela não está disponível como preposto. Confira o e-mail informado."
-        : authError?.message ?? "Não foi possível criar o login do preposto.",
-    );
-  }
-
-  const { data, error } = await supabase
-    .from("prepostos")
-    .insert({
-      titular_user_id: titularUserId,
-      user_id: authData.user.id,
-      nome: input.nome.trim(),
-      email,
-      whatsapp: input.whatsapp.trim(),
-      status: "ativo",
-      permissoes: input.permissoes,
-    })
-    .select("id,titular_user_id,user_id,nome,email,whatsapp,status,permissoes,created_at,updated_at")
-    .single();
-
-  if (error) throw new Error(`Login criado, mas o vínculo com a equipe falhou: ${error.message}`);
-  return { ...mapear(data as PrepostoRow), loginExistente: false };
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("Não foi possível criar a solicitação de vínculo.");
+  return mapear(row as PrepostoRow);
 }
 
 export async function atualizarPreposto(preposto: Preposto): Promise<Preposto> {
   if (!supabase) throw new Error("Supabase não configurado.");
   const titularUserId = await resolverTitular();
 
+  const novoStatus = preposto.status === "pendente" ? "pendente" : preposto.status;
   const { data, error } = await supabase
     .from("prepostos")
     .update({
-      nome: preposto.nome.trim(),
-      whatsapp: preposto.whatsapp.trim(),
-      status: preposto.status,
+      status: novoStatus,
       permissoes: preposto.permissoes,
       updated_at: new Date().toISOString(),
     })
@@ -190,6 +145,32 @@ export async function atualizarPreposto(preposto: Preposto): Promise<Preposto> {
     .select("id,titular_user_id,user_id,nome,email,whatsapp,status,permissoes,created_at,updated_at")
     .single();
 
-  if (error) throw new Error(`Falha ao atualizar preposto: ${error.message}`);
+  if (error) throw new Error(`Falha ao atualizar vínculo: ${error.message}`);
   return mapear(data as PrepostoRow);
+}
+
+export async function listarVinculosPrepostoAtual(): Promise<VinculoPreposto[]> {
+  if (!supabase) throw new Error("Supabase não configurado.");
+
+  const { data, error } = await supabase.rpc("listar_vinculos_preposto_atual");
+  if (error) throw new Error(`Falha ao carregar seus vínculos: ${error.message}`);
+
+  return ((data ?? []) as VinculoRow[]).map((row) => ({
+    id: row.id,
+    titularUserId: row.titular_user_id,
+    nomeRepresentante: row.nome_representante,
+    nomeRepresentacao: row.nome_representacao,
+    status: row.status,
+    permissoes: row.permissoes,
+    criadoEm: row.created_at,
+  }));
+}
+
+export async function responderVinculoPreposto(vinculoId: string, aceitar: boolean) {
+  if (!supabase) throw new Error("Supabase não configurado.");
+  const { error } = await supabase.rpc("responder_vinculo_preposto", {
+    p_vinculo_id: vinculoId,
+    p_aceitar: aceitar,
+  });
+  if (error) throw new Error(error.message);
 }
