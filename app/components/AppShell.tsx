@@ -17,23 +17,22 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { carregarAcessoAtual, pode, type AcessoSistema } from "../lib/acesso";
 import {
   limparRepresentanteAdministrado,
   obterRepresentanteAdministrado,
   type RepresentanteAdministrado,
 } from "../lib/adminContext";
-import { type PerfilComercial, sincronizarPerfilDoUsuario } from "../lib/perfil";
 import { supabase } from "../lib/supabase";
 
-const menuBase = [
-  { label: "Início", href: "/", icon: Home, enabled: true },
-  { label: "Clientes", href: "/clientes", icon: Users, enabled: true },
-  { label: "Rotas", href: "#", icon: MapPinned, enabled: false },
-  { label: "Visitas", href: "/visitas", icon: ClipboardCheck, enabled: true },
-  { label: "Vendas", href: "#", icon: ShoppingCart, enabled: false },
-  { label: "Agenda", href: "#", icon: CalendarDays, enabled: false },
-  { label: "Relatórios", href: "#", icon: BarChart3, enabled: false },
-  { label: "Configurações", href: "/configuracoes", icon: Settings, enabled: true },
+const operacionais = [
+  { label: "Início", href: "/", icon: Home, modulo: "inicio", enabled: true },
+  { label: "Clientes", href: "/clientes", icon: Users, modulo: "clientes", enabled: true },
+  { label: "Rotas", href: "#", icon: MapPinned, modulo: "rotas", enabled: false },
+  { label: "Visitas", href: "/visitas", icon: ClipboardCheck, modulo: "visitas", enabled: true },
+  { label: "Vendas", href: "#", icon: ShoppingCart, modulo: "vendas", enabled: false },
+  { label: "Agenda", href: "#", icon: CalendarDays, modulo: "agenda", enabled: false },
+  { label: "Relatórios", href: "#", icon: BarChart3, modulo: "relatorios", enabled: false },
 ];
 
 function redirecionar(destino: string) {
@@ -42,13 +41,10 @@ function redirecionar(destino: string) {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [estadoAcesso, setEstadoAcesso] = useState<
-    "verificando" | "autenticado" | "sem-acesso"
-  >("verificando");
+  const [estadoAcesso, setEstadoAcesso] = useState<"verificando" | "autenticado" | "sem-acesso">("verificando");
   const [email, setEmail] = useState("");
-  const [perfil, setPerfil] = useState<PerfilComercial | null>(null);
-  const [representanteAdministrado, setRepresentanteAdministrado] =
-    useState<RepresentanteAdministrado | null>(null);
+  const [acesso, setAcesso] = useState<AcessoSistema | null>(null);
+  const [representanteAdministrado, setRepresentanteAdministrado] = useState<RepresentanteAdministrado | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -59,50 +55,54 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
     let ativo = true;
 
-    async function autenticar(session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) {
-      if (!ativo) return;
+    async function autenticar() {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
 
-      if (!session?.user) {
-        setEmail("");
-        setPerfil(null);
-        setRepresentanteAdministrado(null);
+      if (!ativo) return;
+      if (error || !user) {
         setEstadoAcesso("sem-acesso");
         redirecionar("/login");
         return;
       }
 
-      setEmail(session.user.email ?? "Usuário autenticado");
+      if (user.user_metadata?.must_change_password) {
+        redirecionar("/preposto/ativar");
+        return;
+      }
+
+      setEmail(user.email ?? "Usuário autenticado");
 
       try {
-        const perfilAtual = await sincronizarPerfilDoUsuario();
+        const acessoAtual = await carregarAcessoAtual();
         if (!ativo) return;
 
-        if (!perfilAtual) {
-          setPerfil(null);
-          setEstadoAcesso("verificando");
+        if (!acessoAtual) {
           redirecionar("/primeiro-acesso");
           return;
         }
 
-        setPerfil(perfilAtual);
+        setAcesso(acessoAtual);
         setRepresentanteAdministrado(
-          perfilAtual.papel === "admin" ? obterRepresentanteAdministrado() : null,
+          acessoAtual.papel === "admin" ? obterRepresentanteAdministrado() : null,
         );
         setEstadoAcesso("autenticado");
       } catch {
         if (!ativo) return;
-        setPerfil(null);
-        setEstadoAcesso("verificando");
-        redirecionar("/primeiro-acesso");
+        setEstadoAcesso("sem-acesso");
+        await supabase.auth.signOut();
+        redirecionar("/login");
       }
     }
 
-    void supabase.auth.getSession().then(({ data }) => autenticar(data.session));
+    void autenticar();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_evento, session) => {
-      void autenticar(session);
+    } = supabase.auth.onAuthStateChange(() => {
+      void autenticar();
     });
 
     return () => {
@@ -124,7 +124,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     redirecionar("/admin");
   }
 
-  if (estadoAcesso !== "autenticado") {
+  if (estadoAcesso !== "autenticado" || !acesso) {
     return (
       <main className="authLoading">
         <div className="brandMark">T</div>
@@ -133,12 +133,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const menu = perfil?.papel === "admin"
-    ? [
-        ...menuBase,
-        { label: "Admin", href: "/admin", icon: ShieldCheck, enabled: true },
-      ]
-    : menuBase;
+  const menuOperacional = operacionais.filter((item) => {
+    if (item.modulo === "inicio") return true;
+    return pode(acesso, item.modulo, "visualizar");
+  });
+
+  const menu = acesso.papel === "preposto"
+    ? menuOperacional
+    : [
+        ...menuOperacional,
+        { label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: true },
+        { label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: true },
+        ...(acesso.papel === "admin"
+          ? [{ label: "Admin", href: "/admin", icon: ShieldCheck, modulo: "admin", enabled: true }]
+          : []),
+      ];
 
   return (
     <main className="shell">
@@ -153,9 +162,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <nav>
           {menu.map(({ label, href, icon: Icon, enabled }) => {
-            const active =
-              enabled &&
-              (href === "/" ? pathname === "/" : pathname.startsWith(href));
+            const active = enabled && (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
             if (!enabled) {
               return (
@@ -177,9 +184,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <div className="company">
           <small>EMPRESA ATIVA</small>
-          <strong>{perfil?.nomeRepresentacao}</strong>
-          {perfil?.nome && <span>{perfil.nome}</span>}
-          {perfil?.papel === "admin" && <span className="adminRole">Administrador</span>}
+          <strong>{acesso.nomeRepresentacao}</strong>
+          <span>{acesso.nome}</span>
+          {acesso.papel === "admin" && <span className="adminRole">Administrador</span>}
+          {acesso.papel === "preposto" && <span className="adminRole">Preposto</span>}
           <span className="userEmail">{email}</span>
           <button className="logoutButton" type="button" onClick={sair}>
             <LogOut size={16} />
