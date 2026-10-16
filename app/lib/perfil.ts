@@ -1,3 +1,4 @@
+import { limparRepresentanteAdministrado, obterRepresentanteAdministrado } from "./adminContext";
 import { supabase } from "./supabase";
 
 export type PapelUsuario = "usuario" | "admin";
@@ -92,6 +93,38 @@ export async function carregarPerfilAtual(): Promise<PerfilComercial | null> {
 
   if (error || !user) return null;
   return buscarPerfil(user.id);
+}
+
+export async function carregarPerfilOperacional(): Promise<PerfilComercial | null> {
+  if (!supabase) return null;
+
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) return null;
+
+  const perfilAtual = await buscarPerfil(user.id);
+  if (!perfilAtual) return null;
+
+  const representanteAdministrado = obterRepresentanteAdministrado();
+  if (!representanteAdministrado || representanteAdministrado.userId === user.id) {
+    return perfilAtual;
+  }
+
+  if (perfilAtual.papel !== "admin") {
+    limparRepresentanteAdministrado();
+    return perfilAtual;
+  }
+
+  const perfilAdministrado = await buscarPerfil(representanteAdministrado.userId);
+  if (!perfilAdministrado) {
+    limparRepresentanteAdministrado();
+    return perfilAtual;
+  }
+
+  return perfilAdministrado;
 }
 
 export async function salvarPerfilAtual(
