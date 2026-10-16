@@ -7,6 +7,13 @@ export type ModuloPermissao = "clientes" | "rotas" | "visitas" | "vendas" | "age
 export type PermissoesPreposto = Record<ModuloPermissao, Record<AcaoPermissao, boolean>>;
 export type StatusVinculoPreposto = "pendente" | "ativo" | "inativo" | "recusado";
 
+export type RepresentadaVinculo = {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+  disponivel?: boolean;
+};
+
 export type Preposto = {
   id: string;
   titularUserId: string;
@@ -16,6 +23,7 @@ export type Preposto = {
   whatsapp: string;
   status: StatusVinculoPreposto;
   permissoes: PermissoesPreposto;
+  representadas: RepresentadaVinculo[];
   criadoEm: string;
   atualizadoEm: string;
 };
@@ -27,6 +35,7 @@ export type VinculoPreposto = {
   nomeRepresentacao: string;
   status: StatusVinculoPreposto;
   permissoes: PermissoesPreposto;
+  representadas: string[];
   criadoEm: string;
 };
 
@@ -50,6 +59,7 @@ type VinculoRow = {
   nome_representacao: string;
   status: StatusVinculoPreposto;
   permissoes: PermissoesPreposto;
+  representadas: string[] | null;
   created_at: string;
 };
 
@@ -62,7 +72,7 @@ export const permissoesPadrao: PermissoesPreposto = {
   relatorios: { visualizar: true, cadastrar: false, editar: false },
 };
 
-function mapear(row: PrepostoRow): Preposto {
+function mapear(row: PrepostoRow, representadas: RepresentadaVinculo[] = []): Preposto {
   return {
     id: row.id,
     titularUserId: row.titular_user_id,
@@ -72,6 +82,7 @@ function mapear(row: PrepostoRow): Preposto {
     whatsapp: row.whatsapp,
     status: row.status,
     permissoes: row.permissoes,
+    representadas,
     criadoEm: row.created_at,
     atualizadoEm: row.updated_at,
   };
@@ -94,6 +105,40 @@ async function resolverTitular() {
   return administrado?.userId ?? user.id;
 }
 
+async function carregarRepresentadasDosVinculos(vinculoIds: string[]) {
+  const resultado = new Map<string, RepresentadaVinculo[]>();
+  if (!supabase || vinculoIds.length === 0) return resultado;
+
+  const { data: ligacoes, error: ligacoesError } = await supabase
+    .from("preposto_representadas")
+    .select("vinculo_id,representada_id")
+    .in("vinculo_id", vinculoIds);
+
+  if (ligacoesError) throw new Error(`Falha ao carregar representadas da equipe: ${ligacoesError.message}`);
+
+  const idsRepresentadas = Array.from(new Set((ligacoes ?? []).map((item) => item.representada_id)));
+  if (idsRepresentadas.length === 0) return resultado;
+
+  const { data: catalogo, error: catalogoError } = await supabase
+    .from("representadas_catalogo")
+    .select("id,nome,cnpj")
+    .in("id", idsRepresentadas);
+
+  if (catalogoError) throw new Error(`Falha ao carregar catálogo de representadas: ${catalogoError.message}`);
+  const porId = new Map((catalogo ?? []).map((item) => [item.id, item]));
+
+  for (const ligacao of ligacoes ?? []) {
+    const item = porId.get(ligacao.representada_id);
+    if (!item) continue;
+    const lista = resultado.get(ligacao.vinculo_id) ?? [];
+    lista.push({ id: item.id, nome: item.nome, cnpj: item.cnpj ?? null });
+    resultado.set(ligacao.vinculo_id, lista);
+  }
+
+  for (const lista of resultado.values()) lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  return resultado;
+}
+
 export async function listarPrepostos(): Promise<Preposto[]> {
   if (!supabase) throw new Error("Supabase não configurado.");
   const titularUserId = await resolverTitular();
@@ -106,12 +151,37 @@ export async function listarPrepostos(): Promise<Preposto[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Falha ao carregar equipe: ${error.message}`);
-  return ((data ?? []) as PrepostoRow[]).map(mapear);
+  const rows = (data ?? []) as PrepostoRow[];
+  const representadas = await carregarRepresentadasDosVinculos(rows.map((row) => row.id));
+  return rows.map((row) => mapear(row, representadas.get(row.id) ?? []));
+}
+
+export async function listarRepresentadasParaPreposto(
+  email: string,
+  vinculoId?: string | null,
+): Promise<RepresentadaVinculo[]> {
+  if (!supabase) throw new Error("Supabase não configurado.");
+  const titularUserId = await resolverTitular();
+
+  const { data, error } = await supabase.rpc("listar_representadas_para_preposto", {
+    p_titular_user_id: titularUserId,
+    p_email: email.trim().toLowerCase(),
+    p_vinculo_id: vinculoId ?? null,
+  });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((item: { representada_id: string; nome: string; cnpj: string | null; disponivel: boolean }) => ({
+    id: item.representada_id,
+    nome: item.nome,
+    cnpj: item.cnpj ?? null,
+    disponivel: item.disponivel,
+  }));
 }
 
 export async function solicitarVinculoPreposto(input: {
   email: string;
   permissoes: PermissoesPreposto;
+  representadaIds: string[];
 }): Promise<Preposto> {
   if (!supabase) throw new Error("Supabase não configurado.");
   const titularUserId = await resolverTitular();
@@ -120,33 +190,36 @@ export async function solicitarVinculoPreposto(input: {
     p_titular_user_id: titularUserId,
     p_email: input.email.trim().toLowerCase(),
     p_permissoes: input.permissoes,
+    p_representadas: input.representadaIds,
   });
 
   if (error) throw new Error(error.message);
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("Não foi possível criar a solicitação de vínculo.");
-  return mapear(row as PrepostoRow);
+
+  const representadas = await carregarRepresentadasDosVinculos([(row as PrepostoRow).id]);
+  return mapear(row as PrepostoRow, representadas.get((row as PrepostoRow).id) ?? []);
 }
 
-export async function atualizarPreposto(preposto: Preposto): Promise<Preposto> {
+export async function atualizarPreposto(
+  preposto: Preposto,
+  representadaIds: string[],
+): Promise<Preposto> {
   if (!supabase) throw new Error("Supabase não configurado.");
-  const titularUserId = await resolverTitular();
 
-  const novoStatus = preposto.status === "pendente" ? "pendente" : preposto.status;
-  const { data, error } = await supabase
-    .from("prepostos")
-    .update({
-      status: novoStatus,
-      permissoes: preposto.permissoes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", preposto.id)
-    .eq("titular_user_id", titularUserId)
-    .select("id,titular_user_id,user_id,nome,email,whatsapp,status,permissoes,created_at,updated_at")
-    .single();
+  const { data, error } = await supabase.rpc("atualizar_vinculo_preposto", {
+    p_vinculo_id: preposto.id,
+    p_status: preposto.status,
+    p_permissoes: preposto.permissoes,
+    p_representadas: representadaIds,
+  });
 
   if (error) throw new Error(`Falha ao atualizar vínculo: ${error.message}`);
-  return mapear(data as PrepostoRow);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("Vínculo não encontrado após a atualização.");
+
+  const representadas = await carregarRepresentadasDosVinculos([(row as PrepostoRow).id]);
+  return mapear(row as PrepostoRow, representadas.get((row as PrepostoRow).id) ?? []);
 }
 
 export async function listarVinculosPrepostoAtual(): Promise<VinculoPreposto[]> {
@@ -162,6 +235,7 @@ export async function listarVinculosPrepostoAtual(): Promise<VinculoPreposto[]> 
     nomeRepresentacao: row.nome_representacao,
     status: row.status,
     permissoes: row.permissoes,
+    representadas: row.representadas ?? [],
     criadoEm: row.created_at,
   }));
 }
