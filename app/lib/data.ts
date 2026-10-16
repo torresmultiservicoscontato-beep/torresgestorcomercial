@@ -69,7 +69,7 @@ async function exigirUsuario() {
     }
   }
 
-  return { cliente, user, userIdAlvo };
+  return { cliente, userIdAlvo };
 }
 
 export async function carregarClientes(): Promise<Cliente[]> {
@@ -104,6 +104,29 @@ export async function criarCliente(novoCliente: Cliente): Promise<Cliente> {
     .single();
 
   if (error) throw new Error(`Falha ao salvar cliente: ${error.message}`);
+  return data as Cliente;
+}
+
+export async function atualizarCliente(clienteAtualizado: Cliente): Promise<Cliente> {
+  const { cliente, userIdAlvo } = await exigirUsuario();
+
+  const { data, error } = await cliente
+    .from("clientes")
+    .update({
+      nome: clienteAtualizado.nome,
+      cidade: clienteAtualizado.cidade,
+      bairro: clienteAtualizado.bairro,
+      representada: clienteAtualizado.representada,
+      telefone: clienteAtualizado.telefone,
+      status: clienteAtualizado.status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", clienteAtualizado.id)
+    .eq("user_id", userIdAlvo)
+    .select("id,nome,cidade,bairro,representada,telefone,status")
+    .single();
+
+  if (error) throw new Error(`Falha ao atualizar cliente: ${error.message}`);
   return data as Cliente;
 }
 
@@ -149,6 +172,39 @@ export async function criarVisita(novaVisita: Visita): Promise<Visita> {
     .single();
 
   if (error) throw new Error(`Falha ao salvar visita: ${error.message}`);
+
+  const salva = data as VisitaRow;
+  return {
+    id: salva.id,
+    clienteId: salva.cliente_id,
+    clienteNome: salva.cliente_nome,
+    data: salva.data,
+    resultado: salva.resultado,
+    odometro: salva.odometro,
+    observacao: salva.observacao,
+  };
+}
+
+export async function atualizarVisita(visitaAtualizada: Visita): Promise<Visita> {
+  const { cliente, userIdAlvo } = await exigirUsuario();
+
+  const { data, error } = await cliente
+    .from("visitas")
+    .update({
+      cliente_id: visitaAtualizada.clienteId,
+      cliente_nome: visitaAtualizada.clienteNome,
+      data: visitaAtualizada.data,
+      resultado: visitaAtualizada.resultado,
+      odometro: visitaAtualizada.odometro,
+      observacao: visitaAtualizada.observacao,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", visitaAtualizada.id)
+    .eq("user_id", userIdAlvo)
+    .select("id,cliente_id,cliente_nome,data,resultado,odometro,observacao")
+    .single();
+
+  if (error) throw new Error(`Falha ao atualizar visita: ${error.message}`);
 
   const salva = data as VisitaRow;
   return {
