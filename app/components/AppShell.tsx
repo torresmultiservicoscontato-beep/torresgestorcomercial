@@ -12,9 +12,16 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  UserRoundCog,
   Users,
+  X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import {
+  limparRepresentanteAdministrado,
+  obterRepresentanteAdministrado,
+  type RepresentanteAdministrado,
+} from "../lib/adminContext";
 import { type PerfilComercial, sincronizarPerfilDoUsuario } from "../lib/perfil";
 import { supabase } from "../lib/supabase";
 
@@ -40,6 +47,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   >("verificando");
   const [email, setEmail] = useState("");
   const [perfil, setPerfil] = useState<PerfilComercial | null>(null);
+  const [representanteAdministrado, setRepresentanteAdministrado] =
+    useState<RepresentanteAdministrado | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -56,6 +65,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       if (!session?.user) {
         setEmail("");
         setPerfil(null);
+        setRepresentanteAdministrado(null);
         setEstadoAcesso("sem-acesso");
         redirecionar("/login");
         return;
@@ -75,6 +85,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         }
 
         setPerfil(perfilAtual);
+        setRepresentanteAdministrado(
+          perfilAtual.papel === "admin" ? obterRepresentanteAdministrado() : null,
+        );
         setEstadoAcesso("autenticado");
       } catch {
         if (!ativo) return;
@@ -100,8 +113,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   async function sair() {
     if (!supabase) return;
+    limparRepresentanteAdministrado();
     await supabase.auth.signOut();
     redirecionar("/login");
+  }
+
+  function encerrarAdministracao() {
+    limparRepresentanteAdministrado();
+    setRepresentanteAdministrado(null);
+    redirecionar("/admin");
   }
 
   if (estadoAcesso !== "autenticado") {
@@ -168,7 +188,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <section className="content">{children}</section>
+      <section className="content">
+        {representanteAdministrado && (
+          <div className="adminContextBar">
+            <div>
+              <UserRoundCog size={18} />
+              <div>
+                <strong>Administrando: {representanteAdministrado.nome}</strong>
+                <span>
+                  {representanteAdministrado.nomeRepresentacao}
+                  {representanteAdministrado.email ? ` • ${representanteAdministrado.email}` : ""}
+                </span>
+              </div>
+            </div>
+            <button type="button" onClick={encerrarAdministracao}>
+              <X size={16} />
+              Encerrar visualização
+            </button>
+          </div>
+        )}
+        {children}
+      </section>
     </main>
   );
 }
