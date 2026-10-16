@@ -68,7 +68,7 @@ export default function VinculosPrepostoPage() {
         <div className="loginIntro onboardingIntro">
           <p className="eyebrow">MINHAS OPERAÇÕES</p>
           <h1>{nome ? `Olá, ${nome}.` : "Seus vínculos"}</h1>
-          <p>Aceite solicitações de representantes e escolha em qual operação deseja trabalhar.</p>
+          <p>Confira o representante e as representadas incluídas em cada convite antes de aceitar.</p>
         </div>
 
         {erro && <div className="loginAlert error">{erro}</div>}
@@ -85,17 +85,22 @@ export default function VinculosPrepostoPage() {
               <div className="teamMemberInfo">
                 <strong>{vinculo.nomeRepresentacao}</strong>
                 <span>Representante: {vinculo.nomeRepresentante}</span>
+                <div className="representadasTags">
+                  {vinculo.representadas.length > 0
+                    ? vinculo.representadas.map((representada) => <span className="tag" key={representada}>{representada}</span>)
+                    : <span className="tag">Sem representada definida</span>}
+                </div>
               </div>
 
               {vinculo.status === "pendente" && (
                 <div className="visitItemActions">
                   <button className="secondary adminAccessButton" type="button" onClick={() => responder(vinculo.id, false)}><X size={15} />Recusar</button>
-                  <button className="primary adminAccessButton" type="button" onClick={() => responder(vinculo.id, true)}><Check size={15} />Aceitar</button>
+                  <button className="primary adminAccessButton" type="button" onClick={() => responder(vinculo.id, true)} disabled={vinculo.representadas.length === 0}><Check size={15} />Aceitar</button>
                 </div>
               )}
 
               {vinculo.status === "ativo" && (
-                <button className="primary adminAccessButton" type="button" onClick={() => acessar(vinculo)}>Acessar operação</button>
+                <button className="primary adminAccessButton" type="button" onClick={() => acessar(vinculo)} disabled={vinculo.representadas.length === 0}>Acessar operação</button>
               )}
 
               {vinculo.status === "inativo" && <span className="status attention">Acesso inativo</span>}
