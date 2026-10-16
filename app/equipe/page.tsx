@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Pencil, Plus, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
+import { Eye, Pencil, Plus, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import AppShell from "../components/AppShell";
+import { definirPrepostoAdministrado } from "../lib/prepostoContext";
 import {
   atualizarPreposto,
   criarPreposto,
@@ -43,6 +45,7 @@ const formNovo = () => ({
 });
 
 export default function EquipePage() {
+  const router = useRouter();
   const [prepostos, setPrepostos] = useState<Preposto[]>([]);
   const [form, setForm] = useState(formNovo());
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -94,6 +97,20 @@ export default function EquipePage() {
     setMensagem("");
     setMostrarForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function acessarPainel(preposto: Preposto) {
+    if (!preposto.userId || preposto.status !== "ativo") return;
+
+    definirPrepostoAdministrado({
+      titularUserId: preposto.titularUserId,
+      userId: preposto.userId,
+      nome: preposto.nome,
+      email: preposto.email,
+    });
+
+    router.push("/");
+    router.refresh();
   }
 
   function fechar() {
@@ -153,7 +170,7 @@ export default function EquipePage() {
         <div>
           <p className="eyebrow">GESTÃO DA EQUIPE</p>
           <h1>Prepostos</h1>
-          <p>Crie os acessos da sua equipe e controle exatamente o que cada vendedor pode fazer.</p>
+          <p>Crie os acessos da sua equipe, controle permissões e entre na operação individual de cada vendedor.</p>
         </div>
         <button className="primary" type="button" onClick={mostrarForm ? fechar : novo}>
           {mostrarForm ? <X size={18} /> : <Plus size={18} />}
@@ -286,6 +303,16 @@ export default function EquipePage() {
                 {preposto.status === "ativo" ? <UserCheck size={13} /> : <UserX size={13} />}
                 {preposto.status === "ativo" ? "Ativo" : "Inativo"}
               </span>
+              <button
+                className="secondary adminAccessButton"
+                type="button"
+                onClick={() => acessarPainel(preposto)}
+                disabled={!preposto.userId || preposto.status !== "ativo"}
+                title={preposto.status === "ativo" ? "Acessar painel do preposto" : "Ative o preposto para acessar o painel"}
+              >
+                <Eye size={15} />
+                Acessar painel
+              </button>
               <button className="iconBtn" type="button" onClick={() => editar(preposto)} title="Editar preposto">
                 <Pencil size={16} />
               </button>
