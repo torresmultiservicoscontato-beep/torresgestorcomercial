@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { Pencil, Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
-import { Cliente, carregarClientes, criarCliente } from "../lib/data";
+import { Cliente, atualizarCliente, carregarClientes, criarCliente } from "../lib/data";
 import { carregarPerfilOperacional } from "../lib/perfil";
 
 const formInicial = {
@@ -20,6 +20,7 @@ export default function ClientesPage() {
   const [representadas, setRepresentadas] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState(formInicial);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
@@ -64,12 +65,35 @@ export default function ClientesPage() {
     );
   }, [busca, clientes]);
 
-  async function cadastrarCliente(event: FormEvent<HTMLFormElement>) {
+  function fecharFormulario() {
+    setEditandoId(null);
+    setMostrarForm(false);
+    setForm({
+      ...formInicial,
+      representada: representadas[0] || "Não informada",
+    });
+  }
+
+  function editar(cliente: Cliente) {
+    setEditandoId(cliente.id);
+    setForm({
+      nome: cliente.nome,
+      cidade: cliente.cidade,
+      bairro: cliente.bairro,
+      representada: cliente.representada,
+      telefone: cliente.telefone,
+      status: cliente.status,
+    });
+    setMostrarForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function salvarCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.nome.trim() || salvando) return;
 
-    const novoCliente: Cliente = {
-      id: `cliente-${crypto.randomUUID()}`,
+    const clienteParaSalvar: Cliente = {
+      id: editandoId ?? `cliente-${crypto.randomUUID()}`,
       nome: form.nome.trim(),
       cidade: form.cidade.trim(),
       bairro: form.bairro.trim(),
@@ -82,13 +106,16 @@ export default function ClientesPage() {
     setErro("");
 
     try {
-      const clienteSalvo = await criarCliente(novoCliente);
-      setClientes((lista) => [clienteSalvo, ...lista]);
-      setForm({
-        ...formInicial,
-        representada: representadas[0] || "Não informada",
-      });
-      setMostrarForm(false);
+      const clienteSalvo = editandoId
+        ? await atualizarCliente(clienteParaSalvar)
+        : await criarCliente(clienteParaSalvar);
+
+      setClientes((lista) =>
+        editandoId
+          ? lista.map((cliente) => (cliente.id === clienteSalvo.id ? clienteSalvo : cliente))
+          : [clienteSalvo, ...lista],
+      );
+      fecharFormulario();
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível salvar o cliente.");
     } finally {
@@ -105,7 +132,13 @@ export default function ClientesPage() {
           <p>Cadastre, localize e acompanhe a carteira do usuário operacional selecionado.</p>
           <span className="tag">Banco online</span>
         </div>
-        <button className="primary" onClick={() => setMostrarForm((valor) => !valor)}>
+        <button
+          className="primary"
+          onClick={() => {
+            if (mostrarForm) fecharFormulario();
+            else setMostrarForm(true);
+          }}
+        >
           {mostrarForm ? <X size={18} /> : <Plus size={18} />}
           {mostrarForm ? "Fechar" : "Novo cliente"}
         </button>
@@ -114,11 +147,11 @@ export default function ClientesPage() {
       {erro && <div className="emptyState">{erro}</div>}
 
       {mostrarForm && (
-        <form className="panel formPanel" onSubmit={cadastrarCliente}>
+        <form className="panel formPanel" onSubmit={salvarCliente}>
           <div className="panelTitle">
             <div>
-              <p className="eyebrow">CADASTRO</p>
-              <h2>Novo cliente</h2>
+              <p className="eyebrow">{editandoId ? "ALTERAÇÃO" : "CADASTRO"}</p>
+              <h2>{editandoId ? "Editar cliente" : "Novo cliente"}</h2>
             </div>
           </div>
 
@@ -187,11 +220,11 @@ export default function ClientesPage() {
           </div>
 
           <div className="formActions">
-            <button className="secondary" type="button" onClick={() => setMostrarForm(false)}>
+            <button className="secondary" type="button" onClick={fecharFormulario}>
               Cancelar
             </button>
             <button className="primary" type="submit" disabled={salvando}>
-              {salvando ? "Salvando..." : "Salvar cliente"}
+              {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar cliente"}
             </button>
           </div>
         </form>
@@ -229,6 +262,9 @@ export default function ClientesPage() {
               <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>
                 {cliente.status}
               </span>
+              <button className="iconBtn editDataButton" type="button" onClick={() => editar(cliente)} title="Editar cliente">
+                <Pencil size={15} />
+              </button>
             </div>
           ))}
 
