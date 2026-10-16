@@ -240,8 +240,11 @@ export default function VisitasPage() {
                     const cadastradaNoCliente = representadasDoClienteIds.has(representada.id);
                     return (
                       <label
-                        className={selecionada ? "representadaOption selected" : "representadaOption"}
+                        className="representadaOption"
                         key={representada.id}
+                        style={selecionada
+                          ? { borderColor: "var(--blue)", background: "#edf4ff", boxShadow: "0 0 0 1px var(--blue)" }
+                          : undefined}
                       >
                         <input
                           type="checkbox"
