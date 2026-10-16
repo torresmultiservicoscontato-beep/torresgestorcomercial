@@ -186,3 +186,59 @@ begin
   order by u.created_at desc;
 end;
 $$;
+
+-- Reforço da hierarquia: somente contas titulares (perfis) ou o admin geral
+-- podem criar e administrar prepostos. Um preposto não pode promover a própria
+-- conta para representante por inserção direta em public.perfis.
+drop policy if exists prepostos_insert_owner_admin on public.prepostos;
+drop policy if exists prepostos_update_owner_admin on public.prepostos;
+drop policy if exists prepostos_delete_owner_admin on public.prepostos;
+
+create policy prepostos_insert_owner_admin on public.prepostos
+for insert to authenticated
+with check (
+  public.usuario_e_admin()
+  or (
+    titular_user_id = auth.uid()
+    and exists (select 1 from public.perfis p where p.user_id = auth.uid())
+  )
+);
+
+create policy prepostos_update_owner_admin on public.prepostos
+for update to authenticated
+using (
+  public.usuario_e_admin()
+  or (
+    titular_user_id = auth.uid()
+    and exists (select 1 from public.perfis p where p.user_id = auth.uid())
+  )
+)
+with check (
+  public.usuario_e_admin()
+  or (
+    titular_user_id = auth.uid()
+    and exists (select 1 from public.perfis p where p.user_id = auth.uid())
+  )
+);
+
+create policy prepostos_delete_owner_admin on public.prepostos
+for delete to authenticated
+using (
+  public.usuario_e_admin()
+  or (
+    titular_user_id = auth.uid()
+    and exists (select 1 from public.perfis p where p.user_id = auth.uid())
+  )
+);
+
+create policy perfis_sem_promocao_de_preposto
+on public.perfis
+as restrictive
+for insert
+to authenticated
+with check (
+  not exists (
+    select 1 from public.prepostos p
+    where p.user_id = auth.uid()
+  )
+);
