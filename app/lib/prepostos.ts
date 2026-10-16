@@ -103,10 +103,21 @@ export async function criarPreposto(input: {
   if (!authIsolado) throw new Error("Não foi possível iniciar o cadastro do login.");
 
   const email = input.email.trim().toLowerCase();
+
+  const { data: existente } = await supabase
+    .from("prepostos")
+    .select("id")
+    .eq("titular_user_id", titularUserId)
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existente) throw new Error("Já existe um preposto com esse e-mail nesta equipe.");
+
   const { data: authData, error: authError } = await authIsolado.auth.signUp({
     email,
     password: input.senhaTemporaria,
     options: {
+      emailRedirectTo: `${window.location.origin}/login`,
       data: {
         must_change_password: true,
         tipo_acesso: "preposto",
@@ -114,8 +125,8 @@ export async function criarPreposto(input: {
     },
   });
 
-  if (authError || !authData.user) {
-    const mensagem = authError?.message?.toLowerCase().includes("already")
+  if (authError || !authData.user || authData.user.identities?.length === 0) {
+    const mensagem = authError?.message?.toLowerCase().includes("already") || authData.user?.identities?.length === 0
       ? "Já existe uma conta com esse e-mail."
       : authError?.message ?? "Não foi possível criar o login do preposto.";
     throw new Error(mensagem);
