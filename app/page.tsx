@@ -4,8 +4,8 @@ import Link from "next/link";
 import { ChevronRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "./components/AppShell";
+import { carregarAcessoAtual } from "./lib/acesso";
 import { Cliente, Visita, carregarClientes, carregarVisitas } from "./lib/data";
-import { carregarPerfilOperacional } from "./lib/perfil";
 
 function saudacaoAtual() {
   const hora = new Date().getHours();
@@ -26,13 +26,13 @@ export default function HomePage() {
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarVisitas(), carregarPerfilOperacional()])
-      .then(([listaClientes, listaVisitas, perfil]) => {
+    void Promise.all([carregarClientes(), carregarVisitas(), carregarAcessoAtual()])
+      .then(([listaClientes, listaVisitas, acesso]) => {
         if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
-        setNomeUsuario(perfil?.nome.split(/\s+/)[0] ?? "");
-        setRepresentadasCadastradas(perfil?.representadas ?? []);
+        setNomeUsuario(acesso?.nome.split(/\s+/)[0] ?? "");
+        setRepresentadasCadastradas(acesso?.representadas ?? []);
       })
       .catch((falha: Error) => {
         if (!ativo) return;
@@ -97,12 +97,12 @@ export default function HomePage() {
         <article>
           <span>Visitas registradas</span>
           <strong>{carregando ? "—" : visitas.length}</strong>
-          <small>Histórico do usuário</small>
+          <small>Histórico da operação</small>
         </article>
         <article>
           <span>Representadas</span>
           <strong>{carregando ? "—" : representadas}</strong>
-          <small>Definidas no primeiro acesso</small>
+          <small>Marcas da conta titular</small>
         </article>
         <article>
           <span>Próxima ação</span>
@@ -127,9 +127,7 @@ export default function HomePage() {
                 <div className="avatar">{cliente.nome.slice(0, 1).toUpperCase()}</div>
                 <div className="clientInfo">
                   <strong>{cliente.nome}</strong>
-                  <span>
-                    {[cliente.bairro, cliente.cidade].filter(Boolean).join(" • ") || "Local não informado"}
-                  </span>
+                  <span>{[cliente.bairro, cliente.cidade].filter(Boolean).join(" • ") || "Local não informado"}</span>
                 </div>
                 <span className="tag">{cliente.representada}</span>
                 <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>
@@ -140,9 +138,7 @@ export default function HomePage() {
             ))}
 
             {!carregando && clientesFiltrados.length === 0 && (
-              <div className="emptyState">
-                Nenhum cliente cadastrado ainda. Use “Novo cliente” para começar sua carteira.
-              </div>
+              <div className="emptyState">Nenhum cliente cadastrado ainda. Use “Novo cliente” para começar sua carteira.</div>
             )}
           </div>
         </section>
@@ -150,9 +146,7 @@ export default function HomePage() {
         <section className="panel visit quickAction">
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Nova visita</h2>
-          <p>
-            Registre cliente, data, odômetro, resultado e observações. O histórico fica salvo no Supabase e vinculado ao usuário operacional selecionado.
-          </p>
+          <p>Registre cliente, data, odômetro, resultado e observações. O histórico fica vinculado à conta titular e ao responsável pelo atendimento.</p>
           <Link className="primary wide" href={clientes.length > 0 ? "/visitas" : "/clientes"}>
             {clientes.length > 0 ? "Registrar visita" : "Cadastrar primeiro cliente"}
           </Link>
