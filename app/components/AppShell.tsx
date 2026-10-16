@@ -23,6 +23,11 @@ import {
   obterRepresentanteAdministrado,
   type RepresentanteAdministrado,
 } from "../lib/adminContext";
+import {
+  limparPrepostoAdministrado,
+  obterPrepostoAdministrado,
+  type PrepostoAdministrado,
+} from "../lib/prepostoContext";
 import { supabase } from "../lib/supabase";
 
 const operacionais = [
@@ -45,6 +50,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState("");
   const [acesso, setAcesso] = useState<AcessoSistema | null>(null);
   const [representanteAdministrado, setRepresentanteAdministrado] = useState<RepresentanteAdministrado | null>(null);
+  const [prepostoAdministrado, setPrepostoAdministrado] = useState<PrepostoAdministrado | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -84,10 +90,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
           return;
         }
 
+        const representante = acessoAtual.papel === "admin" ? obterRepresentanteAdministrado() : null;
+        const titularAtivo = representante?.userId ?? acessoAtual.titularUserId;
+        let preposto = acessoAtual.papel === "preposto" ? null : obterPrepostoAdministrado();
+
+        if (acessoAtual.papel === "preposto") {
+          limparPrepostoAdministrado();
+        } else if (preposto && preposto.titularUserId !== titularAtivo) {
+          limparPrepostoAdministrado();
+          preposto = null;
+        }
+
         setAcesso(acessoAtual);
-        setRepresentanteAdministrado(
-          acessoAtual.papel === "admin" ? obterRepresentanteAdministrado() : null,
-        );
+        setRepresentanteAdministrado(representante);
+        setPrepostoAdministrado(preposto);
         setEstadoAcesso("autenticado");
       } catch {
         if (!ativo) return;
@@ -113,15 +129,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   async function sair() {
     if (!supabase) return;
+    limparPrepostoAdministrado();
     limparRepresentanteAdministrado();
     await supabase.auth.signOut();
     redirecionar("/login");
   }
 
   function encerrarAdministracao() {
+    limparPrepostoAdministrado();
     limparRepresentanteAdministrado();
+    setPrepostoAdministrado(null);
     setRepresentanteAdministrado(null);
     redirecionar("/admin");
+  }
+
+  function encerrarPreposto() {
+    limparPrepostoAdministrado();
+    setPrepostoAdministrado(null);
+    redirecionar("/equipe");
   }
 
   if (estadoAcesso !== "autenticado" || !acesso) {
@@ -202,7 +227,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <div>
               <UserRoundCog size={18} />
               <div>
-                <strong>Administrando: {representanteAdministrado.nome}</strong>
+                <strong>Administrando representante: {representanteAdministrado.nome}</strong>
                 <span>
                   {representanteAdministrado.nomeRepresentacao}
                   {representanteAdministrado.email ? ` • ${representanteAdministrado.email}` : ""}
@@ -211,10 +236,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </div>
             <button type="button" onClick={encerrarAdministracao}>
               <X size={16} />
-              Encerrar visualização
+              Encerrar representante
             </button>
           </div>
         )}
+
+        {prepostoAdministrado && (
+          <div className="adminContextBar">
+            <div>
+              <UserRoundCog size={18} />
+              <div>
+                <strong>Painel do preposto: {prepostoAdministrado.nome}</strong>
+                <span>{prepostoAdministrado.email || "Operação individual da equipe"}</span>
+              </div>
+            </div>
+            <button type="button" onClick={encerrarPreposto}>
+              <X size={16} />
+              Voltar para Equipe
+            </button>
+          </div>
+        )}
+
         {children}
       </section>
     </main>
