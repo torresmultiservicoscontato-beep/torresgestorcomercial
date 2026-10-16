@@ -1,18 +1,33 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { LockKeyhole, Mail } from "lucide-react";
+import { LockKeyhole, Mail, UserRound, Users } from "lucide-react";
 import { carregarAcessoAtual } from "../lib/acesso";
+import { carregarPerfilPrepostoAtual } from "../lib/prepostoPerfil";
 import { supabase } from "../lib/supabase";
 
 type ModoAcesso = "entrar" | "cadastrar" | "recuperar";
+type TipoConta = "representante" | "preposto";
 
 function redirecionar(destino: string) {
   window.location.replace(destino);
 }
 
+async function destinoUsuarioLogado() {
+  const perfilPreposto = await carregarPerfilPrepostoAtual().catch(() => null);
+  if (perfilPreposto) return "/preposto/vinculos";
+
+  const acesso = await carregarAcessoAtual().catch(() => null);
+  if (acesso) return "/";
+
+  if (!supabase) return "/login";
+  const { data } = await supabase.auth.getUser();
+  return data.user?.user_metadata?.tipo_conta === "preposto" ? "/preposto/cadastro" : "/primeiro-acesso";
+}
+
 export default function LoginPage() {
   const [modo, setModo] = useState<ModoAcesso>("entrar");
+  const [tipoConta, setTipoConta] = useState<TipoConta>("representante");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -27,14 +42,7 @@ export default function LoginPage() {
         await supabase.auth.signOut();
         return;
       }
-
-      if (data.user.user_metadata?.must_change_password) {
-        redirecionar("/preposto/ativar");
-        return;
-      }
-
-      const acesso = await carregarAcessoAtual().catch(() => null);
-      redirecionar(acesso ? "/" : "/primeiro-acesso");
+      redirecionar(await destinoUsuarioLogado());
     });
   }, []);
 
@@ -50,26 +58,15 @@ export default function LoginPage() {
       if (modo === "recuperar") {
         const redirectTo = `${window.location.origin}/redefinir-senha`;
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
-
         if (error) throw error;
         setMensagem("Se esse e-mail estiver cadastrado, você receberá um link para definir uma nova senha.");
         return;
       }
 
       if (modo === "entrar") {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: senha,
-        });
-
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
         if (error) throw error;
-        if (data.user?.user_metadata?.must_change_password) {
-          redirecionar("/preposto/ativar");
-          return;
-        }
-
-        const acesso = await carregarAcessoAtual().catch(() => null);
-        redirecionar(acesso ? "/" : "/primeiro-acesso");
+        redirecionar(await destinoUsuarioLogado());
         return;
       }
 
@@ -78,17 +75,18 @@ export default function LoginPage() {
         password: senha,
         options: {
           emailRedirectTo: `${window.location.origin}/login`,
+          data: { tipo_conta: tipoConta },
         },
       });
 
       if (error) throw error;
 
       if (data.session) {
-        redirecionar("/primeiro-acesso");
+        redirecionar(tipoConta === "preposto" ? "/preposto/cadastro" : "/primeiro-acesso");
         return;
       }
 
-      setMensagem("Acesso criado. Confirme o e-mail recebido e depois entre para completar seu primeiro acesso.");
+      setMensagem("Conta criada. Confirme o e-mail recebido e depois entre para completar seu cadastro.");
       setModo("entrar");
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível concluir o acesso.");
@@ -101,7 +99,7 @@ export default function LoginPage() {
   const descricao = modo === "entrar"
     ? "Use seu e-mail e senha para acessar o Torres Gestor Comercial."
     : modo === "cadastrar"
-      ? "Crie seu acesso com e-mail e senha. Seus dados comerciais serão preenchidos na próxima etapa."
+      ? "Escolha seu perfil e crie sua própria conta."
       : "Informe seu e-mail. Enviaremos um link seguro para você criar uma nova senha.";
 
   return (
@@ -109,10 +107,7 @@ export default function LoginPage() {
       <section className="loginCard">
         <div className="loginBrand">
           <div className="brandMark">T</div>
-          <div>
-            <strong>TORRES</strong>
-            <span>Gestor Comercial</span>
-          </div>
+          <div><strong>TORRES</strong><span>Gestor Comercial</span></div>
         </div>
 
         <div className="loginIntro">
@@ -125,52 +120,30 @@ export default function LoginPage() {
         {mensagem && <div className="loginAlert success">{mensagem}</div>}
 
         <form onSubmit={enviar}>
+          {modo === "cadastrar" && (
+            <div className="accountTypeSelector">
+              <button className={tipoConta === "representante" ? "accountType active" : "accountType"} type="button" onClick={() => setTipoConta("representante")}>
+                <UserRound size={18} /><strong>Representante</strong><span>Administra sua própria operação e equipe.</span>
+              </button>
+              <button className={tipoConta === "preposto" ? "accountType active" : "accountType"} type="button" onClick={() => setTipoConta("preposto")}>
+                <Users size={18} /><strong>Preposto</strong><span>Cria seu cadastro e recebe vínculos de representantes.</span>
+              </button>
+            </div>
+          )}
+
           <label className="field">
             E-mail
-            <div className="loginInput">
-              <Mail size={18} />
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="seuemail@exemplo.com"
-              />
-            </div>
+            <div className="loginInput"><Mail size={18} /><input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="seuemail@exemplo.com" /></div>
           </label>
 
           {modo !== "recuperar" && (
             <label className="field">
               Senha
-              <div className="loginInput">
-                <LockKeyhole size={18} />
-                <input
-                  type="password"
-                  autoComplete={modo === "entrar" ? "current-password" : "new-password"}
-                  required
-                  minLength={6}
-                  value={senha}
-                  onChange={(event) => setSenha(event.target.value)}
-                  placeholder="Mínimo de 6 caracteres"
-                />
-              </div>
+              <div className="loginInput"><LockKeyhole size={18} /><input type="password" autoComplete={modo === "entrar" ? "current-password" : "new-password"} required minLength={6} value={senha} onChange={(event) => setSenha(event.target.value)} placeholder="Mínimo de 6 caracteres" /></div>
             </label>
           )}
 
-          {modo === "entrar" && (
-            <button
-              className="forgotPassword"
-              type="button"
-              onClick={() => {
-                setModo("recuperar");
-                setErro("");
-                setMensagem("");
-              }}
-            >
-              Esqueceu a senha?
-            </button>
-          )}
+          {modo === "entrar" && <button className="forgotPassword" type="button" onClick={() => { setModo("recuperar"); setErro(""); setMensagem(""); }}>Esqueceu a senha?</button>}
 
           <button className="primary wide" type="submit" disabled={carregando}>
             {carregando ? "Aguarde..." : modo === "entrar" ? "Entrar" : modo === "cadastrar" ? "Criar acesso" : "Enviar link de recuperação"}
@@ -178,27 +151,9 @@ export default function LoginPage() {
         </form>
 
         {modo === "recuperar" ? (
-          <button
-            className="loginSwitch"
-            type="button"
-            onClick={() => {
-              setModo("entrar");
-              setErro("");
-              setMensagem("");
-            }}
-          >
-            Voltar para o login
-          </button>
+          <button className="loginSwitch" type="button" onClick={() => { setModo("entrar"); setErro(""); setMensagem(""); }}>Voltar para o login</button>
         ) : (
-          <button
-            className="loginSwitch"
-            type="button"
-            onClick={() => {
-              setModo((atual) => (atual === "entrar" ? "cadastrar" : "entrar"));
-              setErro("");
-              setMensagem("");
-            }}
-          >
+          <button className="loginSwitch" type="button" onClick={() => { setModo((atual) => (atual === "entrar" ? "cadastrar" : "entrar")); setErro(""); setMensagem(""); }}>
             {modo === "entrar" ? "Primeiro acesso? Criar conta" : "Já tenho acesso? Entrar"}
           </button>
         )}
