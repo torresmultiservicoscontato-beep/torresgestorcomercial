@@ -1,19 +1,21 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Eye, MailPlus, Pencil, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
+import { Eye, MailPlus, Pencil, Search, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "../components/AppShell";
 import { definirPrepostoAdministrado } from "../lib/prepostoContext";
 import {
   atualizarPreposto,
   listarPrepostos,
+  listarRepresentadasParaPreposto,
   permissoesPadrao,
   solicitarVinculoPreposto,
   type AcaoPermissao,
   type ModuloPermissao,
   type PermissoesPreposto,
   type Preposto,
+  type RepresentadaVinculo,
   type StatusVinculoPreposto,
 } from "../lib/prepostos";
 
@@ -40,6 +42,7 @@ const formNovo = () => ({
   email: "",
   status: "pendente" as StatusVinculoPreposto,
   permissoes: copiarPermissoes(permissoesPadrao),
+  representadaIds: [] as string[],
 });
 
 function rotuloStatus(status: StatusVinculoPreposto) {
@@ -53,9 +56,11 @@ export default function EquipePage() {
   const router = useRouter();
   const [prepostos, setPrepostos] = useState<Preposto[]>([]);
   const [form, setForm] = useState(formNovo());
+  const [representadas, setRepresentadas] = useState<RepresentadaVinculo[]>([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editando, setEditando] = useState<Preposto | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [buscandoRepresentadas, setBuscandoRepresentadas] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -77,25 +82,69 @@ export default function EquipePage() {
     }));
   }
 
+  function alterarRepresentada(id: string, marcada: boolean) {
+    setForm((atual) => ({
+      ...atual,
+      representadaIds: marcada
+        ? Array.from(new Set([...atual.representadaIds, id]))
+        : atual.representadaIds.filter((item) => item !== id),
+    }));
+  }
+
   function novo() {
     setEditando(null);
     setForm(formNovo());
+    setRepresentadas([]);
     setErro("");
     setMensagem("");
     setMostrarForm(true);
   }
 
-  function editar(preposto: Preposto) {
+  async function buscarRepresentadas(email = form.email, vinculoId?: string | null) {
+    if (!email.trim()) {
+      setErro("Informe o e-mail do preposto.");
+      return;
+    }
+
+    setBuscandoRepresentadas(true);
+    setErro("");
+    try {
+      const lista = await listarRepresentadasParaPreposto(email, vinculoId);
+      setRepresentadas(lista);
+      if (!vinculoId) {
+        setForm((atual) => ({ ...atual, representadaIds: [] }));
+      }
+    } catch (falha) {
+      setRepresentadas([]);
+      setErro(falha instanceof Error ? falha.message : "Não foi possível verificar as representadas.");
+    } finally {
+      setBuscandoRepresentadas(false);
+    }
+  }
+
+  async function editar(preposto: Preposto) {
     setEditando(preposto);
     setForm({
       email: preposto.email,
       status: preposto.status,
       permissoes: copiarPermissoes(preposto.permissoes),
+      representadaIds: preposto.representadas.map((item) => item.id),
     });
+    setRepresentadas([]);
     setErro("");
     setMensagem("");
     setMostrarForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+
+    setBuscandoRepresentadas(true);
+    try {
+      const lista = await listarRepresentadasParaPreposto(preposto.email, preposto.id);
+      setRepresentadas(lista);
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as representadas do vínculo.");
+    } finally {
+      setBuscandoRepresentadas(false);
+    }
   }
 
   function acessarPainel(preposto: Preposto) {
@@ -113,12 +162,17 @@ export default function EquipePage() {
   function fechar() {
     setMostrarForm(false);
     setEditando(null);
+    setRepresentadas([]);
     setForm(formNovo());
   }
 
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (salvando) return;
+    if (form.representadaIds.length === 0) {
+      setErro("Selecione pelo menos uma representada para este preposto.");
+      return;
+    }
 
     setSalvando(true);
     setErro("");
@@ -126,11 +180,18 @@ export default function EquipePage() {
 
     try {
       if (editando) {
-        const atualizado = await atualizarPreposto({ ...editando, status: form.status, permissoes: form.permissoes });
+        const atualizado = await atualizarPreposto(
+          { ...editando, status: form.status, permissoes: form.permissoes },
+          form.representadaIds,
+        );
         setPrepostos((lista) => lista.map((item) => (item.id === atualizado.id ? atualizado : item)));
-        setMensagem("Permissões do vínculo atualizadas.");
+        setMensagem("Vínculo, representadas e permissões atualizados.");
       } else {
-        const criado = await solicitarVinculoPreposto({ email: form.email, permissoes: form.permissoes });
+        const criado = await solicitarVinculoPreposto({
+          email: form.email,
+          permissoes: form.permissoes,
+          representadaIds: form.representadaIds,
+        });
         setPrepostos((lista) => [criado, ...lista]);
         setMensagem(`Solicitação enviada para ${criado.nome}. O vínculo só ficará ativo depois que o preposto aceitar.`);
       }
@@ -148,7 +209,7 @@ export default function EquipePage() {
         <div>
           <p className="eyebrow">GESTÃO DA EQUIPE</p>
           <h1>Prepostos</h1>
-          <p>Localize um preposto já cadastrado pelo e-mail e solicite o vínculo com a sua operação.</p>
+          <p>Vincule o preposto pelo e-mail e escolha exatamente quais representadas ele poderá atender.</p>
         </div>
         <button className="primary" type="button" onClick={mostrarForm ? fechar : novo}>
           {mostrarForm ? <X size={18} /> : <MailPlus size={18} />}
@@ -176,13 +237,73 @@ export default function EquipePage() {
                 required
                 readOnly={Boolean(editando)}
                 value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                onChange={(event) => {
+                  setForm({ ...form, email: event.target.value, representadaIds: [] });
+                  setRepresentadas([]);
+                }}
                 placeholder="preposto@exemplo.com"
               />
-              <small>O preposto precisa criar a própria conta antes. Nome, WhatsApp e demais dados pessoais não podem ser alterados pelo representante.</small>
+              <small>O preposto precisa ter o próprio cadastro. O representante não altera os dados pessoais dele.</small>
             </label>
+          </div>
 
-            {editando && editando.status !== "pendente" && (
+          {!editando && (
+            <button
+              className="secondary"
+              type="button"
+              disabled={buscandoRepresentadas}
+              onClick={() => void buscarRepresentadas()}
+            >
+              <Search size={16} />
+              {buscandoRepresentadas ? "Verificando..." : "Localizar e escolher representadas"}
+            </button>
+          )}
+
+          {(buscandoRepresentadas || representadas.length > 0) && (
+            <div className="permissionsBlock">
+              <div className="settingsSectionTitle">
+                <ShieldCheck size={18} />
+                <div>
+                  <strong>Representadas deste vínculo</strong>
+                  <span>Marque uma ou mais. Uma representada já comprometida com este preposto em outra operação fica bloqueada.</span>
+                </div>
+              </div>
+
+              {buscandoRepresentadas ? (
+                <div className="emptyState">Verificando disponibilidade...</div>
+              ) : (
+                <div className="representadasChecklist">
+                  {representadas.map((representada) => {
+                    const selecionada = form.representadaIds.includes(representada.id);
+                    const indisponivel = representada.disponivel === false && !selecionada;
+                    return (
+                      <label className={indisponivel ? "representadaOption disabled" : "representadaOption"} key={representada.id}>
+                        <input
+                          type="checkbox"
+                          checked={selecionada}
+                          disabled={indisponivel}
+                          onChange={(event) => alterarRepresentada(representada.id, event.target.checked)}
+                        />
+                        <span>
+                          <strong>{representada.nome}</strong>
+                          <small>
+                            {indisponivel
+                              ? "Já vinculada a este preposto em outra operação"
+                              : representada.cnpj
+                                ? `CNPJ: ${representada.cnpj}`
+                                : "Disponível"}
+                          </small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {editando && editando.status !== "pendente" && (
+            <div className="formGrid">
               <label className="field">
                 Status nesta operação
                 <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as StatusVinculoPreposto })}>
@@ -190,15 +311,15 @@ export default function EquipePage() {
                   <option value="inativo">Inativo</option>
                 </select>
               </label>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="permissionsBlock">
             <div className="settingsSectionTitle">
               <ShieldCheck size={18} />
               <div>
                 <strong>Permissões nesta operação</strong>
-                <span>Essas permissões pertencem somente ao vínculo com este representante.</span>
+                <span>Essas permissões valem somente para este representante e para as representadas marcadas acima.</span>
               </div>
             </div>
 
@@ -223,7 +344,9 @@ export default function EquipePage() {
 
           <div className="formActions">
             <button className="secondary" type="button" onClick={fechar}>Cancelar</button>
-            <button className="primary" type="submit" disabled={salvando}>{salvando ? "Salvando..." : editando ? "Salvar permissões" : "Enviar solicitação"}</button>
+            <button className="primary" type="submit" disabled={salvando || representadas.length === 0}>
+              {salvando ? "Salvando..." : editando ? "Salvar vínculo" : "Enviar solicitação"}
+            </button>
           </div>
         </form>
       )}
@@ -246,16 +369,21 @@ export default function EquipePage() {
                 <strong>{preposto.nome}</strong>
                 <span>{preposto.email}</span>
                 {preposto.whatsapp && <span>{preposto.whatsapp}</span>}
+                <div className="representadasTags">
+                  {preposto.representadas.length > 0
+                    ? preposto.representadas.map((item) => <span className="tag" key={item.id}>{item.nome}</span>)
+                    : <span className="tag">Sem representada definida</span>}
+                </div>
               </div>
               <span className={preposto.status === "ativo" ? "status" : "status attention"}>
                 {preposto.status === "ativo" ? <UserCheck size={13} /> : <UserX size={13} />}
                 {rotuloStatus(preposto.status)}
               </span>
-              <button className="secondary adminAccessButton" type="button" onClick={() => acessarPainel(preposto)} disabled={!preposto.userId || preposto.status !== "ativo"}>
+              <button className="secondary adminAccessButton" type="button" onClick={() => acessarPainel(preposto)} disabled={!preposto.userId || preposto.status !== "ativo" || preposto.representadas.length === 0}>
                 <Eye size={15} />
                 Acessar painel
               </button>
-              <button className="iconBtn" type="button" onClick={() => editar(preposto)} title="Editar permissões do vínculo">
+              <button className="iconBtn" type="button" onClick={() => void editar(preposto)} title="Editar vínculo">
                 <Pencil size={16} />
               </button>
             </article>
