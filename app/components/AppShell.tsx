@@ -17,7 +17,13 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { carregarAcessoAtual, pode, type AcessoSistema } from "../lib/acesso";
+import {
+  carregarAcessoAtual,
+  definirOperacaoPreposto,
+  limparOperacaoPreposto,
+  pode,
+  type AcessoSistema,
+} from "../lib/acesso";
 import {
   limparRepresentanteAdministrado,
   obterRepresentanteAdministrado,
@@ -131,8 +137,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
     if (!supabase) return;
     limparPrepostoAdministrado();
     limparRepresentanteAdministrado();
+    limparOperacaoPreposto();
     await supabase.auth.signOut();
     redirecionar("/login");
+  }
+
+  function trocarOperacao(titularUserId: string) {
+    if (!titularUserId || titularUserId === acesso?.titularUserId) return;
+    definirOperacaoPreposto(titularUserId);
+    redirecionar("/");
   }
 
   function encerrarAdministracao() {
@@ -213,6 +226,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <span>{acesso.nome}</span>
           {acesso.papel === "admin" && <span className="adminRole">Administrador</span>}
           {acesso.papel === "preposto" && <span className="adminRole">Preposto</span>}
+
+          {acesso.papel === "preposto" && acesso.operacoes.length > 1 && (
+            <label className="operationSwitcher">
+              <small>OPERAÇÃO</small>
+              <select
+                value={acesso.titularUserId}
+                onChange={(event) => trocarOperacao(event.target.value)}
+                aria-label="Trocar operação do preposto"
+              >
+                {acesso.operacoes.map((operacao) => (
+                  <option key={operacao.vinculoId} value={operacao.titularUserId}>
+                    {operacao.nomeRepresentacao} — {operacao.nomeTitular}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <span className="userEmail">{email}</span>
           <button className="logoutButton" type="button" onClick={sair}>
             <LogOut size={16} />
