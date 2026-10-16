@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Pencil, X } from "lucide-react";
+import { Building2, ClipboardCheck, Pencil, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import { Cliente, Visita, atualizarVisita, carregarClientes, carregarVisitas, criarVisita } from "../lib/data";
@@ -15,7 +15,14 @@ function hojeLocal() {
 }
 
 function formInicial() {
-  return { clienteId: "", data: hojeLocal(), resultado: "Sem venda", odometro: "", observacao: "" };
+  return {
+    clienteId: "",
+    representadaIds: [] as string[],
+    data: hojeLocal(),
+    resultado: "Sem venda",
+    odometro: "",
+    observacao: "",
+  };
 }
 
 export default function VisitasPage() {
@@ -58,9 +65,29 @@ export default function VisitasPage() {
     [visitas],
   );
 
+  const clienteSelecionado = useMemo(
+    () => clientes.find((cliente) => cliente.id === form.clienteId) ?? null,
+    [clientes, form.clienteId],
+  );
+
   function cancelarEdicao() {
     setEditandoId(null);
     setForm(formInicial());
+  }
+
+  function alterarRepresentada(id: string, marcada: boolean) {
+    setForm((atual) => ({
+      ...atual,
+      representadaIds: marcada
+        ? Array.from(new Set([...atual.representadaIds, id]))
+        : atual.representadaIds.filter((item) => item !== id),
+    }));
+  }
+
+  function selecionarCliente(clienteId: string) {
+    const cliente = clientes.find((item) => item.id === clienteId);
+    const idsPadrao = cliente?.representadas.length === 1 ? [cliente.representadas[0].id] : [];
+    setForm((atual) => ({ ...atual, clienteId, representadaIds: idsPadrao }));
   }
 
   function editar(visita: Visita) {
@@ -68,6 +95,7 @@ export default function VisitasPage() {
     setEditandoId(visita.id);
     setForm({
       clienteId: visita.clienteId,
+      representadaIds: visita.representadas.map((item) => item.id),
       data: visita.data,
       resultado: visita.resultado,
       odometro: visita.odometro,
@@ -86,6 +114,17 @@ export default function VisitasPage() {
       return;
     }
 
+    if (form.representadaIds.length === 0) {
+      setErro("Selecione pelo menos uma representada atendida nesta visita.");
+      return;
+    }
+
+    const representadasSelecionadas = cliente.representadas.filter((item) => form.representadaIds.includes(item.id));
+    if (representadasSelecionadas.length !== form.representadaIds.length) {
+      setErro("A visita só pode usar representadas vinculadas ao cliente selecionado.");
+      return;
+    }
+
     const visitaParaSalvar: Visita = {
       id: editandoId ?? `visita-${crypto.randomUUID()}`,
       clienteId: cliente.id,
@@ -94,6 +133,7 @@ export default function VisitasPage() {
       resultado: form.resultado,
       odometro: form.odometro.trim(),
       observacao: form.observacao.trim(),
+      representadas: representadasSelecionadas,
     };
 
     setSalvando(true);
@@ -123,7 +163,7 @@ export default function VisitasPage() {
         <div>
           <p className="eyebrow">ROTINA DE CAMPO</p>
           <h1>Visitas</h1>
-          <p>Registre e acompanhe os atendimentos da operação comercial.</p>
+          <p>Registre o cliente e quais representadas foram atendidas em cada visita.</p>
           <span className="tag">Banco online</span>
         </div>
       </header>
@@ -149,7 +189,7 @@ export default function VisitasPage() {
                 required
                 value={form.clienteId}
                 disabled={carregando || clientes.length === 0}
-                onChange={(event) => setForm({ ...form, clienteId: event.target.value })}
+                onChange={(event) => selecionarCliente(event.target.value)}
               >
                 <option value="" disabled>
                   {carregando ? "Carregando clientes..." : clientes.length === 0 ? "Cadastre um cliente primeiro" : "Selecionar cliente"}
@@ -157,6 +197,37 @@ export default function VisitasPage() {
                 {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
               </select>
             </label>
+
+            {clienteSelecionado && (
+              <div className="permissionsBlock">
+                <div className="settingsSectionTitle">
+                  <Building2 size={18} />
+                  <div>
+                    <strong>Representadas desta visita</strong>
+                    <span>Escolha uma ou mais dentre as representadas vinculadas a {clienteSelecionado.nome}.</span>
+                  </div>
+                </div>
+
+                <div className="representadasChecklist">
+                  {clienteSelecionado.representadas.map((representada) => {
+                    const selecionada = form.representadaIds.includes(representada.id);
+                    return (
+                      <label className="representadaOption" key={representada.id}>
+                        <input
+                          type="checkbox"
+                          checked={selecionada}
+                          onChange={(event) => alterarRepresentada(representada.id, event.target.checked)}
+                        />
+                        <span>
+                          <strong>{representada.nome}</strong>
+                          <small>{selecionada ? "Incluída nesta visita" : "Não selecionada"}</small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="two">
               <label className="field">
@@ -205,6 +276,11 @@ export default function VisitasPage() {
                 <div>
                   <strong>{visita.clienteNome}</strong>
                   <span>{visita.data.split("-").reverse().join("/")}</span>
+                  <div className="representadasTags">
+                    {visita.representadas.map((representada) => (
+                      <span className="tag" key={representada.id}>{representada.nome}</span>
+                    ))}
+                  </div>
                 </div>
                 <div className="visitItemActions">
                   <span className="tag">{visita.resultado}</span>
