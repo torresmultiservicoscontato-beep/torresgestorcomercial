@@ -60,27 +60,34 @@ async function carregarLeaflet() {
   return window.L;
 }
 
-function adicionarCamadaBase(L: any, mapa: any) {
-  let usandoAlternativa = false;
-
-  const principal = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-    subdomains: "abcd",
-    maxZoom: 20,
-  });
-
-  principal.on("tileerror", () => {
-    if (usandoAlternativa) return;
-    usandoAlternativa = true;
-    mapa.removeLayer(principal);
-
-    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+function adicionarCamadasBase(L: any, mapa: any) {
+  const ruas = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    {
       attribution: "Tiles &copy; Esri",
       maxZoom: 19,
-    }).addTo(mapa);
-  });
+    },
+  );
 
-  principal.addTo(mapa);
+  const satelite = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution: "Imagery &copy; Esri",
+      maxZoom: 19,
+    },
+  );
+
+  ruas.addTo(mapa);
+  L.control.layers(
+    {
+      "Mapa de ruas": ruas,
+      "Satélite": satelite,
+    },
+    undefined,
+    { position: "topright", collapsed: true },
+  ).addTo(mapa);
+
+  return ruas;
 }
 
 function enderecoBusca(cliente: ClienteMapaRota) {
@@ -166,7 +173,7 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
             await onCoordenadas(cliente.id, coordenadas.latitude, coordenadas.longitude);
           }
         } catch {
-          // O cliente permanece listado como endereço não localizado para correção cadastral.
+          // Mantém o cliente listado para permitir correção cadastral do endereço.
         }
         if (indice < pendentes.length - 1) await esperar(1100);
       }
@@ -186,6 +193,7 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
 
     async function desenharMapa() {
       if (!mapaElementoRef.current) return;
+
       const comCoordenadas = clientesFiltrados.filter(
         (cliente) => cliente.latitude !== null && cliente.longitude !== null,
       );
@@ -214,7 +222,14 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
         );
         mapaInstanciaRef.current = mapa;
 
-        adicionarCamadaBase(L, mapa);
+        const camadaBase = adicionarCamadasBase(L, mapa);
+        let errosTiles = 0;
+        camadaBase.on("tileerror", () => {
+          errosTiles += 1;
+          if (errosTiles >= 4 && !cancelado) {
+            setMensagemMapa("A camada do mapa não respondeu. Tente alternar para Satélite no controle do mapa.");
+          }
+        });
 
         const pontos = comCoordenadas.map((cliente, indice) => {
           const latitude = cliente.latitude as number;
@@ -225,9 +240,11 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
             iconSize: [30, 30],
             iconAnchor: [15, 30],
           });
+
           L.marker([latitude, longitude], { icon: icone })
             .addTo(mapa)
             .bindPopup(`<strong>${cliente.nome}</strong><br>${enderecoExibicao(cliente)}`);
+
           return [latitude, longitude] as [number, number];
         });
 
@@ -261,7 +278,9 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
         mapa.fitBounds(limites, { padding: [35, 35], maxZoom: 15 });
         window.setTimeout(() => mapa.invalidateSize(), 100);
       } catch (falha) {
-        if (!cancelado) setMensagemMapa(falha instanceof Error ? falha.message : "Não foi possível abrir o mapa.");
+        if (!cancelado) {
+          setMensagemMapa(falha instanceof Error ? falha.message : "Não foi possível abrir o mapa.");
+        }
       }
     }
 
@@ -276,7 +295,9 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
     };
   }, [clientesFiltrados]);
 
-  const localizados = clientesFiltrados.filter((cliente) => cliente.latitude !== null && cliente.longitude !== null).length;
+  const localizados = clientesFiltrados.filter(
+    (cliente) => cliente.latitude !== null && cliente.longitude !== null,
+  ).length;
 
   return (
     <div className="routeMapOverlay" role="dialog" aria-modal="true" aria-label={`Mapa da rota de ${rota.municipio || "campo"}`}>
@@ -321,7 +342,9 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
                   <strong>{cliente.nome}</strong>
                   <span>{enderecoExibicao(cliente)}</span>
                   <small>{cliente.representadas.map((item) => item.nome).join(" • ") || "Sem representada"}</small>
-                  {(cliente.latitude === null || cliente.longitude === null) && <small className="routeStopWarning">Aguardando localização do endereço</small>}
+                  {(cliente.latitude === null || cliente.longitude === null) && (
+                    <small className="routeStopWarning">Aguardando localização do endereço</small>
+                  )}
                 </div>
               </article>
             ))}
