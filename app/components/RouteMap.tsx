@@ -60,6 +60,29 @@ async function carregarLeaflet() {
   return window.L;
 }
 
+function adicionarCamadaBase(L: any, mapa: any) {
+  let usandoAlternativa = false;
+
+  const principal = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    subdomains: "abcd",
+    maxZoom: 20,
+  });
+
+  principal.on("tileerror", () => {
+    if (usandoAlternativa) return;
+    usandoAlternativa = true;
+    mapa.removeLayer(principal);
+
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Tiles &copy; Esri",
+      maxZoom: 19,
+    }).addTo(mapa);
+  });
+
+  principal.addTo(mapa);
+}
+
 function enderecoBusca(cliente: ClienteMapaRota) {
   return [
     [cliente.logradouro, cliente.numero].filter(Boolean).join(", "),
@@ -191,10 +214,7 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
         );
         mapaInstanciaRef.current = mapa;
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap",
-          maxZoom: 19,
-        }).addTo(mapa);
+        adicionarCamadaBase(L, mapa);
 
         const pontos = comCoordenadas.map((cliente, indice) => {
           const latitude = cliente.latitude as number;
