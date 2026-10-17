@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, MapPin, Navigation, X } from "lucide-react";
+import { LoaderCircle, MapPin, Navigation, UserRound, X } from "lucide-react";
 import type { ClienteMapaRota, RotaSemanal } from "../lib/rotas";
 
 declare global {
@@ -13,6 +13,7 @@ declare global {
 type Props = {
   rota: RotaSemanal;
   clientes: ClienteMapaRota[];
+  responsavelNome?: string;
   onClose: () => void;
   onCoordenadas: (clienteId: string, latitude: number, longitude: number) => Promise<void>;
 };
@@ -63,26 +64,17 @@ async function carregarLeaflet() {
 function adicionarCamadasBase(L: any, mapa: any) {
   const ruas = L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution: "Tiles &copy; Esri",
-      maxZoom: 19,
-    },
+    { attribution: "Tiles &copy; Esri", maxZoom: 19 },
   );
 
   const satelite = L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution: "Imagery &copy; Esri",
-      maxZoom: 19,
-    },
+    { attribution: "Imagery &copy; Esri", maxZoom: 19 },
   );
 
   ruas.addTo(mapa);
   L.control.layers(
-    {
-      "Mapa de ruas": ruas,
-      "Satélite": satelite,
-    },
+    { "Mapa de ruas": ruas, "Satélite": satelite },
     undefined,
     { position: "topright", collapsed: true },
   ).addTo(mapa);
@@ -124,7 +116,7 @@ async function geocodificar(cliente: ClienteMapaRota) {
   return { latitude, longitude };
 }
 
-export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Props) {
+export default function RouteMap({ rota, clientes, responsavelNome = "Titular", onClose, onCoordenadas }: Props) {
   const mapaElementoRef = useRef<HTMLDivElement | null>(null);
   const mapaInstanciaRef = useRef<any>(null);
   const [clientesLocais, setClientesLocais] = useState(clientes);
@@ -184,7 +176,6 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
     return () => {
       cancelado = true;
     };
-    // A geocodificação deve iniciar apenas quando a lista carregada muda.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientes]);
 
@@ -307,6 +298,7 @@ export default function RouteMap({ rota, clientes, onClose, onCoordenadas }: Pro
             <p className="eyebrow">MAPA DA ROTA</p>
             <h2>{rota.municipio || "Rota semanal"}</h2>
             <span>{rota.bairros.join(" • ") || "Sem bairros definidos"}</span>
+            <span className="routeMapOwner"><UserRound size={12} /> Responsável: {responsavelNome}</span>
           </div>
           <button className="iconBtn" type="button" onClick={onClose} title="Fechar mapa">
             <X size={18} />
