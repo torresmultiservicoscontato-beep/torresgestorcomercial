@@ -18,6 +18,21 @@ export type RotaSemanal = {
   atualizadoEm: string;
 };
 
+export type ClienteMapaRota = {
+  id: string;
+  nome: string;
+  cidade: string;
+  bairro: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  cep: string;
+  latitude: number | null;
+  longitude: number | null;
+  ordem: number | null;
+  representadas: RepresentadaRota[];
+};
+
 type RotaRow = {
   id: string;
   dia_semana: number;
@@ -27,6 +42,22 @@ type RotaRow = {
   representada_ids: string[] | null;
   representada_nomes: string[] | null;
   updated_at: string;
+};
+
+type ClienteMapaRow = {
+  id: string;
+  nome: string;
+  cidade: string;
+  bairro: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  cep: string;
+  latitude: number | null;
+  longitude: number | null;
+  rota_ordem: number | null;
+  representada_ids: string[] | null;
+  representada_nomes: string[] | null;
 };
 
 function exigirSupabase() {
@@ -136,4 +167,43 @@ export async function salvarRotaSemanal(input: {
 
   if (error) throw new Error(`Falha ao salvar rota: ${error.message}`);
   return listarRotasSemanais();
+}
+
+export async function listarClientesMapaRota(rotaId: string): Promise<ClienteMapaRota[]> {
+  const { cliente } = await resolverContexto("visualizar");
+  const { data, error } = await cliente.rpc("listar_clientes_mapa_rota", {
+    p_rota_id: rotaId,
+  });
+
+  if (error) throw new Error(`Falha ao carregar clientes da rota: ${error.message}`);
+
+  return ((data ?? []) as ClienteMapaRow[]).map((row) => {
+    const ids = row.representada_ids ?? [];
+    const nomes = row.representada_nomes ?? [];
+    return {
+      id: row.id,
+      nome: row.nome,
+      cidade: row.cidade ?? "",
+      bairro: row.bairro ?? "",
+      logradouro: row.logradouro ?? "",
+      numero: row.numero ?? "",
+      complemento: row.complemento ?? "",
+      cep: row.cep ?? "",
+      latitude: row.latitude === null ? null : Number(row.latitude),
+      longitude: row.longitude === null ? null : Number(row.longitude),
+      ordem: row.rota_ordem === null ? null : Number(row.rota_ordem),
+      representadas: ids.map((id, indice) => ({ id, nome: nomes[indice] ?? "Representada" })),
+    };
+  });
+}
+
+export async function atualizarCoordenadasClienteRota(clienteId: string, latitude: number, longitude: number) {
+  const { cliente } = await resolverContexto("visualizar");
+  const { error } = await cliente.rpc("atualizar_coordenadas_cliente_rota", {
+    p_cliente_id: clienteId,
+    p_latitude: latitude,
+    p_longitude: longitude,
+  });
+
+  if (error) throw new Error(`Falha ao salvar localização do cliente: ${error.message}`);
 }
