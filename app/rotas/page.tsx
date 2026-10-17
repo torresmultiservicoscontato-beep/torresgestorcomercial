@@ -17,6 +17,8 @@ import {
   type RotaSemanal,
 } from "../lib/rotas";
 
+const CHAVE_PROPRIA = "__propria__";
+
 const dias = [
   { id: 1, nome: "Segunda-feira" },
   { id: 2, nome: "Terça-feira" },
@@ -26,6 +28,13 @@ const dias = [
   { id: 6, nome: "Sábado" },
   { id: 7, nome: "Domingo" },
 ];
+
+type RotaComResponsavel = {
+  rota: RotaSemanal;
+  chave: string;
+  nomeResponsavel: string;
+  propria: boolean;
+};
 
 function formularioVazio(diaSemana: number) {
   return {
@@ -38,11 +47,12 @@ function formularioVazio(diaSemana: number) {
 }
 
 export default function RotasPage() {
-  const [rotas, setRotas] = useState<RotaSemanal[]>([]);
+  const [rotasPorResponsavel, setRotasPorResponsavel] = useState<Record<string, RotaSemanal[]>>({});
   const [representadas, setRepresentadas] = useState<RepresentadaRota[]>([]);
   const [prepostos, setPrepostos] = useState<Preposto[]>([]);
-  const [responsavelVisualizado, setResponsavelVisualizado] = useState("");
-  const [nomeResponsavelVisualizado, setNomeResponsavelVisualizado] = useState("Titular");
+  const [responsaveisSelecionados, setResponsaveisSelecionados] = useState<string[]>([CHAVE_PROPRIA]);
+  const [nomeProprio, setNomeProprio] = useState("Titular");
+  const [usuarioEhPreposto, setUsuarioEhPreposto] = useState(false);
   const [editandoDia, setEditandoDia] = useState<number | null>(null);
   const [form, setForm] = useState(formularioVazio(1));
   const [carregando, setCarregando] = useState(true);
@@ -70,10 +80,12 @@ export default function RotasPage() {
         ]);
 
         if (!ativo) return;
-        setRotas(listaRotas);
+        setRotasPorResponsavel({ [CHAVE_PROPRIA]: listaRotas });
         setRepresentadas(listaRepresentadas);
         setPodeCadastrar(pode(acesso, "rotas", "cadastrar"));
         setPodeEditar(pode(acesso, "rotas", "editar"));
+        setUsuarioEhPreposto(acesso?.papel === "preposto");
+        setNomeProprio(acesso?.papel === "preposto" ? acesso.nome : "Titular");
 
         if (acesso && acesso.papel !== "preposto") {
           try {
@@ -105,41 +117,103 @@ export default function RotasPage() {
     };
   }, []);
 
-  const rotasPorDia = useMemo(
-    () => new Map(rotas.map((rota) => [rota.diaSemana, rota])),
-    [rotas],
+  const responsaveisEquipe = useMemo(
+    () => [
+      { chave: CHAVE_PROPRIA, nome: usuarioEhPreposto ? nomeProprio : "Titular / minhas rotas", userId: "" },
+      ...prepostos.map((preposto) => ({
+        chave: preposto.userId as string,
+        nome: preposto.nome,
+        userId: preposto.userId as string,
+      })),
+    ],
+    [nomeProprio, prepostos, usuarioEhPreposto],
   );
 
-  const visualizandoPreposto = Boolean(responsavelVisualizado);
+  const todosSelecionados = responsaveisEquipe.length > 0
+    && responsaveisEquipe.every((responsavel) => responsaveisSelecionados.includes(responsavel.chave));
 
-  async function trocarResponsavel(userId: string) {
-    if (carregandoResponsavel) return;
+  function nomeResponsavel(chave: string) {
+    if (chave === CHAVE_PROPRIA) return nomeProprio;
+    return prepostos.find((preposto) => preposto.userId === chave)?.nome ?? "Preposto";
+  }
 
-    const preposto = prepostos.find((item) => item.userId === userId);
-    setResponsavelVisualizado(userId);
-    setNomeResponsavelVisualizado(preposto?.nome ?? "Titular");
-    setEditandoDia(null);
-    setMapaRota(null);
-    setClientesMapa([]);
+  async function garantirRotasResponsavel(chave: string) {
+    if (rotasPorResponsavel[chave]) return rotasPorResponsavel[chave];
+
+    const userId = chave === CHAVE_PROPRIA ? undefined : chave;
+    const rotas = await listarRotasSemanais(userId);
+    setRotasPorResponsavel((atual) => ({ ...atual, [chave]: rotas }));
+    return rotas;
+  }
+
+  async function alternarResponsavel(chave: string, marcada: boolean) {
     setErro("");
     setMensagem("");
-    setCarregandoResponsavel(true);
+    setMapaRota(null);
+    setClientesMapa([]);
+    setEditandoDia(null);
 
+    if (!marcada) {
+      setResponsaveisSelecionados((atual) => atual.filter((item) => item !== chave));
+      return;
+    }
+
+    setResponsaveisSelecionados((atual) => Array.from(new Set([...atual, chave])));
+    if (rotasPorResponsavel[chave]) return;
+
+    setCarregandoResponsavel(true);
     try {
-      const novasRotas = await listarRotasSemanais(userId || undefined);
-      setRotas(novasRotas);
-      setNomeResponsavelVisualizado(userId ? preposto?.nome ?? "Preposto" : "Titular");
+      await garantirRotasResponsavel(chave);
     } catch (falha) {
+      setResponsaveisSelecionados((atual) => atual.filter((item) => item !== chave));
       setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as rotas deste responsável.");
     } finally {
       setCarregandoResponsavel(false);
     }
   }
 
-  function abrirCadastro(diaSemana: number) {
-    if (visualizandoPreposto) return;
+  async function alternarTodos(marcada: boolean) {
+    setErro("");
+    setMensagem("");
+    setMapaRota(null);
+    setClientesMapa([]);
+    setEditandoDia(null);
 
-    const rota = rotasPorDia.get(diaSemana);
+    if (!marcada) {
+      setResponsaveisSelecionados([]);
+      return;
+    }
+
+    const chaves = responsaveisEquipe.map((responsavel) => responsavel.chave);
+    setResponsaveisSelecionados(chaves);
+    setCarregandoResponsavel(true);
+
+    try {
+      await Promise.all(chaves.map((chave) => garantirRotasResponsavel(chave)));
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível carregar todas as rotas da equipe.");
+    } finally {
+      setCarregandoResponsavel(false);
+    }
+  }
+
+  function rotasDoDia(diaSemana: number): RotaComResponsavel[] {
+    return responsaveisSelecionados.flatMap((chave) => {
+      const rota = (rotasPorResponsavel[chave] ?? []).find((item) => item.diaSemana === diaSemana);
+      if (!rota) return [];
+      return [{
+        rota,
+        chave,
+        nomeResponsavel: nomeResponsavel(chave),
+        propria: chave === CHAVE_PROPRIA,
+      }];
+    });
+  }
+
+  function abrirCadastro(diaSemana: number) {
+    if (!responsaveisSelecionados.includes(CHAVE_PROPRIA)) return;
+
+    const rota = (rotasPorResponsavel[CHAVE_PROPRIA] ?? []).find((item) => item.diaSemana === diaSemana);
     setEditandoDia(diaSemana);
     setErro("");
     setMensagem("");
@@ -171,16 +245,55 @@ export default function RotasPage() {
     }));
   }
 
-  async function abrirMapa(rota: RotaSemanal) {
-    setMapaRota(rota);
-    setMapaResponsavelNome(nomeResponsavelVisualizado);
+  async function abrirMapaDia(diaSemana: number, rotasSelecionadas: RotaComResponsavel[]) {
+    if (rotasSelecionadas.length === 0) return;
+
     setClientesMapa([]);
     setCarregandoMapa(true);
     setErro("");
 
     try {
-      const clientes = await listarClientesMapaRota(rota.id);
-      setClientesMapa(clientes);
+      const resultados = await Promise.all(
+        rotasSelecionadas.map(async (item) => {
+          const clientes = await listarClientesMapaRota(item.rota.id);
+          return clientes.map((cliente) => ({
+            ...cliente,
+            responsavelNome: item.nomeResponsavel,
+            grupoRotaId: item.rota.id,
+          }));
+        }),
+      );
+
+      const representadasUnicas = new Map<string, RepresentadaRota>();
+      const bairros = new Set<string>();
+      const municipios = new Set<string>();
+
+      rotasSelecionadas.forEach((item) => {
+        if (item.rota.municipio) municipios.add(item.rota.municipio);
+        item.rota.bairros.forEach((bairro) => bairros.add(bairro));
+        item.rota.representadas.forEach((representada) => representadasUnicas.set(representada.id, representada));
+      });
+
+      const nomeDia = dias.find((dia) => dia.id === diaSemana)?.nome ?? "Rota";
+      const rotaMapa: RotaSemanal = {
+        id: `consolidada-${diaSemana}`,
+        diaSemana,
+        municipio: rotasSelecionadas.length > 1
+          ? `Rota consolidada — ${nomeDia}`
+          : rotasSelecionadas[0].rota.municipio,
+        bairros: Array.from(bairros),
+        observacao: "",
+        representadas: Array.from(representadasUnicas.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+        atualizadoEm: "",
+      };
+
+      setMapaRota(rotaMapa);
+      setClientesMapa(resultados.flat());
+      setMapaResponsavelNome(
+        rotasSelecionadas.length > 1
+          ? `${rotasSelecionadas.length} responsáveis selecionados`
+          : `Responsável: ${rotasSelecionadas[0].nomeResponsavel}`,
+      );
     } catch (falha) {
       setMapaRota(null);
       setErro(falha instanceof Error ? falha.message : "Não foi possível abrir o mapa desta rota.");
@@ -198,7 +311,7 @@ export default function RotasPage() {
 
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (salvando || editandoDia === null || visualizandoPreposto) return;
+    if (salvando || editandoDia === null) return;
 
     const bairros = form.bairrosTexto
       .split(",")
@@ -215,6 +328,8 @@ export default function RotasPage() {
       return;
     }
 
+    const rotaPropria = (rotasPorResponsavel[CHAVE_PROPRIA] ?? []).find((rota) => rota.diaSemana === editandoDia);
+
     setSalvando(true);
     setErro("");
     setMensagem("");
@@ -226,9 +341,9 @@ export default function RotasPage() {
         bairros,
         observacao: form.observacao,
         representadaIds: form.representadaIds,
-        editando: Boolean(rotasPorDia.get(editandoDia)),
+        editando: Boolean(rotaPropria),
       });
-      setRotas(atualizadas);
+      setRotasPorResponsavel((atual) => ({ ...atual, [CHAVE_PROPRIA]: atualizadas }));
       const nomeDia = dias.find((dia) => dia.id === editandoDia)?.nome ?? "Dia";
       setMensagem(`Rota de ${nomeDia} salva.`);
       fecharCadastro();
@@ -245,43 +360,58 @@ export default function RotasPage() {
         <div>
           <p className="eyebrow">PLANEJAMENTO COMERCIAL</p>
           <h1>Rotas semanais</h1>
-          <p>Cadastre a rota padrão de cada dia e acompanhe também as rotas e os clientes dos seus prepostos.</p>
+          <p>Cadastre a rota padrão e combine no mapa os clientes do titular e dos prepostos selecionados.</p>
         </div>
       </header>
 
       {podeVerEquipe && prepostos.length > 0 && (
-        <section className="panel routeTeamViewer">
+        <section className="panel routeTeamViewer routeTeamViewerChecks">
           <div className="routeTeamViewerTitle">
             <UsersRound size={19} />
             <div>
               <strong>Visualização da equipe</strong>
-              <span>O titular pode consultar as rotas e os mapas dos prepostos vinculados à sua operação.</span>
+              <span>Marque quem você quer visualizar. É possível combinar titular e vários prepostos no mesmo mapa.</span>
             </div>
           </div>
 
-          <label className="field routeTeamSelect">
-            Visualizar rotas de
-            <select
-              value={responsavelVisualizado}
-              disabled={carregandoResponsavel}
-              onChange={(event) => void trocarResponsavel(event.target.value)}
-            >
-              <option value="">Titular / minhas rotas</option>
-              {prepostos.map((preposto) => (
-                <option key={preposto.id} value={preposto.userId ?? ""}>{preposto.nome}</option>
-              ))}
-            </select>
-          </label>
+          <div className="routeTeamChecks">
+            <label className="routeTeamCheck routeTeamCheckAll">
+              <input
+                type="checkbox"
+                checked={todosSelecionados}
+                disabled={carregandoResponsavel}
+                onChange={(event) => void alternarTodos(event.target.checked)}
+              />
+              <span><strong>Todos</strong><small>Mapa consolidado da equipe</small></span>
+            </label>
 
-          <span className={visualizandoPreposto ? "adminBadge routeViewingBadge" : "tag routeViewingBadge"}>
-            {carregandoResponsavel ? "Carregando..." : visualizandoPreposto ? `Preposto: ${nomeResponsavelVisualizado}` : "Titular"}
+            {responsaveisEquipe.map((responsavel) => (
+              <label className="routeTeamCheck" key={responsavel.chave}>
+                <input
+                  type="checkbox"
+                  checked={responsaveisSelecionados.includes(responsavel.chave)}
+                  disabled={carregandoResponsavel}
+                  onChange={(event) => void alternarResponsavel(responsavel.chave, event.target.checked)}
+                />
+                <span>
+                  <strong>{responsavel.nome}</strong>
+                  <small>{responsavel.chave === CHAVE_PROPRIA ? "Rota própria" : "Preposto"}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <span className="tag routeViewingBadge">
+            {carregandoResponsavel
+              ? "Carregando..."
+              : `${responsaveisSelecionados.length} de ${responsaveisEquipe.length} selecionados`}
           </span>
         </section>
       )}
 
-      {visualizandoPreposto && (
+      {podeVerEquipe && responsaveisSelecionados.length > 1 && (
         <div className="loginAlert success settingsAlert">
-          Visualização de supervisão: você está vendo as rotas e os clientes de {nomeResponsavelVisualizado}. As rotas do preposto ficam somente para consulta neste painel.
+          Visão consolidada ativa: o mapa de cada dia reunirá os clientes dos responsáveis marcados, mantendo o percurso de cada rota separado.
         </div>
       )}
 
@@ -290,26 +420,40 @@ export default function RotasPage() {
 
       <section className="routesGrid">
         {dias.map((dia) => {
-          const rota = rotasPorDia.get(dia.id);
+          const rotasSelecionadas = rotasDoDia(dia.id);
+          const rotaPropria = (rotasPorResponsavel[CHAVE_PROPRIA] ?? []).find((rota) => rota.diaSemana === dia.id);
           const estaEditando = editandoDia === dia.id;
-          const podeAbrir = !visualizandoPreposto && (rota ? podeEditar : podeCadastrar);
+          const propriaSelecionada = responsaveisSelecionados.includes(CHAVE_PROPRIA);
+          const podeAbrirCadastro = propriaSelecionada && (rotaPropria ? podeEditar : podeCadastrar);
 
           return (
             <article className="panel routeCard" key={dia.id}>
               <div className="panelTitle routeCardHeader">
                 <div>
-                  <p className="eyebrow">{visualizandoPreposto ? `ROTA DE ${nomeResponsavelVisualizado.toUpperCase()}` : "ROTA PADRÃO"}</p>
+                  <p className="eyebrow">
+                    {responsaveisSelecionados.length > 1 ? "ROTA CONSOLIDADA" : "ROTA PADRÃO"}
+                  </p>
                   <h2>{dia.nome}</h2>
                 </div>
                 <div className="routeCardActions">
-                  {rota && !estaEditando && (
-                    <button className="iconBtn routeMapButton" type="button" onClick={() => void abrirMapa(rota)} title="Abrir mapa da rota">
+                  {rotasSelecionadas.length > 0 && !estaEditando && (
+                    <button
+                      className="iconBtn routeMapButton"
+                      type="button"
+                      onClick={() => void abrirMapaDia(dia.id, rotasSelecionadas)}
+                      title="Abrir mapa da rota"
+                    >
                       <MapIcon size={16} />
                     </button>
                   )}
-                  {podeAbrir && !estaEditando && (
-                    <button className="iconBtn" type="button" onClick={() => abrirCadastro(dia.id)} title={rota ? "Editar rota" : "Cadastrar rota"}>
-                      {rota ? <Pencil size={15} /> : <MapPinned size={16} />}
+                  {podeAbrirCadastro && !estaEditando && (
+                    <button
+                      className="iconBtn"
+                      type="button"
+                      onClick={() => abrirCadastro(dia.id)}
+                      title={rotaPropria ? "Editar minha rota" : "Cadastrar minha rota"}
+                    >
+                      {rotaPropria ? <Pencil size={15} /> : <MapPinned size={16} />}
                     </button>
                   )}
                 </div>
@@ -385,40 +529,54 @@ export default function RotasPage() {
                     </button>
                   </div>
                 </form>
-              ) : rota ? (
-                <div className="routeSummary">
-                  <div className="routeLocation">
-                    <MapPinned size={18} />
-                    <div>
-                      <strong>{rota.municipio || "Município não informado"}</strong>
-                      <span>{rota.bairros.length > 0 ? rota.bairros.join(" • ") : "Sem bairros definidos"}</span>
-                    </div>
-                  </div>
-
-                  <div className="representadasTags">
-                    {rota.representadas.map((representada) => (
-                      <span className="tag" key={representada.id}>{representada.nome}</span>
+              ) : rotasSelecionadas.length > 0 ? (
+                <div className="routeSummary routeCombinedSummary">
+                  <div className="routePeopleList">
+                    {rotasSelecionadas.map((item) => (
+                      <div className="routePersonRoute" key={`${item.chave}-${item.rota.id}`}>
+                        <div className="routePersonRouteHeader">
+                          <strong>{item.nomeResponsavel}</strong>
+                          <span className={item.propria ? "tag" : "adminBadge"}>{item.propria ? "Própria" : "Preposto"}</span>
+                        </div>
+                        <div className="routeLocation">
+                          <MapPinned size={18} />
+                          <div>
+                            <strong>{item.rota.municipio || "Município não informado"}</strong>
+                            <span>{item.rota.bairros.length > 0 ? item.rota.bairros.join(" • ") : "Sem bairros definidos"}</span>
+                          </div>
+                        </div>
+                        <div className="representadasTags">
+                          {item.rota.representadas.map((representada) => (
+                            <span className="tag" key={representada.id}>{representada.nome}</span>
+                          ))}
+                        </div>
+                        {item.rota.observacao && <p>{item.rota.observacao}</p>}
+                      </div>
                     ))}
                   </div>
 
-                  <button className="secondary wide routeOpenMap" type="button" onClick={() => void abrirMapa(rota)}>
-                    <MapIcon size={16} /> {visualizandoPreposto ? `Ver clientes de ${nomeResponsavelVisualizado} no mapa` : "Ver mapa da rota"}
+                  <button className="secondary wide routeOpenMap" type="button" onClick={() => void abrirMapaDia(dia.id, rotasSelecionadas)}>
+                    <MapIcon size={16} /> {rotasSelecionadas.length > 1 ? "Ver mapa consolidado" : "Ver mapa da rota"}
                   </button>
 
-                  {rota.observacao && <p>{rota.observacao}</p>}
+                  {propriaSelecionada && !rotaPropria && podeCadastrar && (
+                    <button className="secondary wide" type="button" onClick={() => abrirCadastro(dia.id)}>
+                      Cadastrar minha rota de {dia.nome}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="routeEmpty">
                   <MapPinned size={24} />
-                  <strong>{visualizandoPreposto ? "Rota não cadastrada pelo preposto" : "Rota não cadastrada"}</strong>
+                  <strong>Nenhuma rota cadastrada</strong>
                   <span>
-                    {visualizandoPreposto
-                      ? `${nomeResponsavelVisualizado} não possui rota cadastrada para este dia.`
-                      : "Defina município ou bairros e as representadas deste dia."}
+                    {responsaveisSelecionados.length === 0
+                      ? "Marque pelo menos um responsável na visualização da equipe."
+                      : "Os responsáveis selecionados não possuem rota cadastrada para este dia."}
                   </span>
-                  {podeCadastrar && !visualizandoPreposto && (
+                  {propriaSelecionada && podeCadastrar && (
                     <button className="secondary" type="button" onClick={() => abrirCadastro(dia.id)}>
-                      Cadastrar rota
+                      Cadastrar minha rota
                     </button>
                   )}
                 </div>
