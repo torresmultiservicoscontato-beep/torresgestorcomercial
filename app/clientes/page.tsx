@@ -1,30 +1,60 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, Pencil, Plus, Search, X } from "lucide-react";
+import { Building2, MapPinned, Pencil, Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
-  Cliente,
-  RepresentadaOperacional,
-  atualizarCliente,
-  carregarClientes,
+  atualizarClienteDetalhado,
+  carregarClientesDetalhados,
+  criarClienteDetalhado,
+  type ClienteDetalhado,
+} from "../lib/clientesDetalhados";
+import {
   carregarRepresentadasOperacionais,
-  criarCliente,
+  type RepresentadaOperacional,
 } from "../lib/data";
+import { listarRotasSemanais, type RotaSemanal } from "../lib/rotas";
+
+const nomesDias: Record<number, string> = {
+  1: "Segunda-feira",
+  2: "Terça-feira",
+  3: "Quarta-feira",
+  4: "Quinta-feira",
+  5: "Sexta-feira",
+  6: "Sábado",
+  7: "Domingo",
+};
 
 const formInicial = {
   nome: "",
   cidade: "",
   bairro: "",
+  logradouro: "",
+  numero: "",
+  complemento: "",
+  cep: "",
   representadaIds: [] as string[],
   telefone: "",
   status: "Ativo",
+  rotaId: "",
 };
 
+function enderecoResumido(cliente: ClienteDetalhado) {
+  const linha1 = [cliente.logradouro, cliente.numero].filter(Boolean).join(", ");
+  const linha2 = [cliente.bairro, cliente.cidade].filter(Boolean).join(" • ");
+  return [linha1, linha2].filter(Boolean).join(" — ") || "Local não informado";
+}
+
+function nomeRota(rota: RotaSemanal) {
+  const local = [rota.municipio, rota.bairros.join(" / ")].filter(Boolean).join(" • ");
+  return `${nomesDias[rota.diaSemana] ?? "Dia"}${local ? ` — ${local}` : ""}`;
+}
+
 export default function ClientesPage() {
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientes, setClientes] = useState<ClienteDetalhado[]>([]);
   const [representadas, setRepresentadas] = useState<RepresentadaOperacional[]>([]);
+  const [rotas, setRotas] = useState<RotaSemanal[]>([]);
   const [busca, setBusca] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -38,11 +68,22 @@ export default function ClientesPage() {
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([carregarClientes(), carregarRepresentadasOperacionais(), carregarAcessoAtual()])
-      .then(([listaClientes, listaRepresentadas, acesso]) => {
+    async function carregar() {
+      try {
+        const acesso = await carregarAcessoAtual();
+        if (!acesso) throw new Error("Não foi possível identificar seu acesso.");
+
+        const podeVerRotas = pode(acesso, "rotas", "visualizar");
+        const [listaClientes, listaRepresentadas, listaRotas] = await Promise.all([
+          carregarClientesDetalhados(),
+          carregarRepresentadasOperacionais(),
+          podeVerRotas ? listarRotasSemanais() : Promise.resolve([] as RotaSemanal[]),
+        ]);
+
         if (!ativo) return;
         setClientes(listaClientes);
         setRepresentadas(listaRepresentadas);
+        setRotas(listaRotas);
         setPodeCadastrar(pode(acesso, "clientes", "cadastrar"));
         setPodeEditar(pode(acesso, "clientes", "editar"));
         setForm((atual) => ({
@@ -54,38 +95,47 @@ export default function ClientesPage() {
                 ? [listaRepresentadas[0].id]
                 : [],
         }));
-      })
-      .catch((falha: Error) => {
+      } catch (falha) {
         if (!ativo) return;
-        setErro(falha.message);
-      })
-      .finally(() => {
+        setErro(falha instanceof Error ? falha.message : "Não foi possível carregar os clientes.");
+      } finally {
         if (ativo) setCarregando(false);
-      });
+      }
+    }
+
+    void carregar();
 
     return () => {
       ativo = false;
     };
   }, []);
 
+  const rotasPorId = useMemo(() => new Map(rotas.map((rota) => [rota.id, rota])), [rotas]);
+
   const clientesFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     if (!termo) return clientes;
 
-    return clientes.filter((cliente) =>
-      [
+    return clientes.filter((cliente) => {
+      const rota = cliente.rotaId ? rotasPorId.get(cliente.rotaId) : null;
+      return [
         cliente.nome,
         cliente.cidade,
         cliente.bairro,
+        cliente.logradouro,
+        cliente.numero,
+        cliente.complemento,
+        cliente.cep,
         cliente.representada,
         cliente.telefone,
         cliente.responsavelNome,
+        rota ? nomeRota(rota) : "",
       ]
         .join(" ")
         .toLowerCase()
-        .includes(termo),
-    );
-  }, [busca, clientes]);
+        .includes(termo);
+    });
+  }, [busca, clientes, rotasPorId]);
 
   function representadasPadrao() {
     return representadas.length === 1 ? [representadas[0].id] : [];
@@ -94,6 +144,7 @@ export default function ClientesPage() {
   function fecharFormulario() {
     setEditandoId(null);
     setMostrarForm(false);
+    setErro("");
     setForm({ ...formInicial, representadaIds: representadasPadrao() });
   }
 
@@ -106,24 +157,31 @@ export default function ClientesPage() {
     }));
   }
 
-  function editar(cliente: Cliente) {
+  function editar(cliente: ClienteDetalhado) {
     if (!podeEditar) return;
     setEditandoId(cliente.id);
     setForm({
       nome: cliente.nome,
       cidade: cliente.cidade,
       bairro: cliente.bairro,
+      logradouro: cliente.logradouro,
+      numero: cliente.numero,
+      complemento: cliente.complemento,
+      cep: cliente.cep,
       representadaIds: cliente.representadas.map((item) => item.id),
       telefone: cliente.telefone,
       status: cliente.status,
+      rotaId: cliente.rotaId ?? "",
     });
     setMostrarForm(true);
+    setErro("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function salvarCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.nome.trim() || salvando) return;
+
     if (form.representadaIds.length === 0) {
       setErro("Selecione pelo menos uma representada para este cliente.");
       return;
@@ -139,15 +197,44 @@ export default function ClientesPage() {
       return;
     }
 
-    const clienteParaSalvar: Cliente = {
+    const rotaSelecionada = form.rotaId ? rotasPorId.get(form.rotaId) : null;
+    if (form.rotaId && !rotaSelecionada) {
+      setErro("A rota selecionada não está mais disponível.");
+      return;
+    }
+
+    if (rotaSelecionada) {
+      const compartilhaRepresentada = rotaSelecionada.representadas.some((representada) =>
+        form.representadaIds.includes(representada.id),
+      );
+      if (!compartilhaRepresentada) {
+        setErro("A rota escolhida precisa atender pelo menos uma das representadas deste cliente.");
+        return;
+      }
+
+      if (!form.cidade.trim() || !form.logradouro.trim()) {
+        setErro("Para colocar o cliente no mapa da rota, informe pelo menos cidade e logradouro.");
+        return;
+      }
+    }
+
+    const clienteParaSalvar: ClienteDetalhado = {
       id: editandoId ?? `cliente-${crypto.randomUUID()}`,
       nome: form.nome.trim(),
       cidade: form.cidade.trim(),
       bairro: form.bairro.trim(),
+      logradouro: form.logradouro.trim(),
+      numero: form.numero.trim(),
+      complemento: form.complemento.trim(),
+      cep: form.cep.trim(),
       representada: representadasSelecionadas.map((item) => item.nome).join(" • "),
       representadas: representadasSelecionadas,
       telefone: form.telefone.trim(),
       status: form.status,
+      rotaId: rotaSelecionada?.id ?? null,
+      rotaOrdem: clienteExistente?.rotaOrdem ?? null,
+      latitude: clienteExistente?.latitude ?? null,
+      longitude: clienteExistente?.longitude ?? null,
       responsavelUserId: clienteExistente?.responsavelUserId,
       responsavelNome: clienteExistente?.responsavelNome,
       responsavelTipo: clienteExistente?.responsavelTipo,
@@ -158,8 +245,8 @@ export default function ClientesPage() {
 
     try {
       const clienteSalvo = editandoId
-        ? await atualizarCliente(clienteParaSalvar)
-        : await criarCliente(clienteParaSalvar);
+        ? await atualizarClienteDetalhado(clienteParaSalvar)
+        : await criarClienteDetalhado(clienteParaSalvar);
 
       setClientes((lista) =>
         editandoId
@@ -180,7 +267,7 @@ export default function ClientesPage() {
         <div>
           <p className="eyebrow">CARTEIRA COMERCIAL</p>
           <h1>Clientes</h1>
-          <p>Cadastre, localize e acompanhe a carteira comercial da operação.</p>
+          <p>Cadastre, localize e vincule cada cliente à rota semanal correspondente.</p>
           <span className="tag">Banco online</span>
         </div>
         {podeCadastrar && (
@@ -200,7 +287,7 @@ export default function ClientesPage() {
         )}
       </header>
 
-      {erro && <div className="emptyState">{erro}</div>}
+      {erro && <div className="loginAlert error settingsAlert">{erro}</div>}
 
       {mostrarForm && (
         <form className="panel formPanel" onSubmit={salvarCliente}>
@@ -216,13 +303,33 @@ export default function ClientesPage() {
               Nome do cliente
               <input autoFocus required value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} placeholder="Ex.: Loja Central Materiais" />
             </label>
+            <label className="field span2">
+              Logradouro
+              <input value={form.logradouro} onChange={(event) => setForm({ ...form, logradouro: event.target.value })} placeholder="Ex.: Rua Doutor Siqueira" />
+            </label>
+            <label className="field">
+              Número
+              <input value={form.numero} onChange={(event) => setForm({ ...form, numero: event.target.value })} placeholder="Ex.: 125" />
+            </label>
+            <label className="field">
+              Complemento
+              <input value={form.complemento} onChange={(event) => setForm({ ...form, complemento: event.target.value })} placeholder="Loja, sala, referência..." />
+            </label>
+            <label className="field">
+              Bairro
+              <input value={form.bairro} onChange={(event) => setForm({ ...form, bairro: event.target.value })} placeholder="Ex.: Centro" />
+            </label>
             <label className="field">
               Cidade
               <input value={form.cidade} onChange={(event) => setForm({ ...form, cidade: event.target.value })} placeholder="Ex.: Magé" />
             </label>
             <label className="field">
-              Bairro
-              <input value={form.bairro} onChange={(event) => setForm({ ...form, bairro: event.target.value })} placeholder="Ex.: Centro" />
+              CEP
+              <input value={form.cep} onChange={(event) => setForm({ ...form, cep: event.target.value })} placeholder="25900-000" />
+            </label>
+            <label className="field">
+              Telefone / WhatsApp
+              <input value={form.telefone} onChange={(event) => setForm({ ...form, telefone: event.target.value })} placeholder="(21) 99999-9999" />
             </label>
           </div>
 
@@ -259,11 +366,30 @@ export default function ClientesPage() {
             )}
           </div>
 
-          <div className="formGrid">
+          <div className="permissionsBlock">
+            <div className="settingsSectionTitle">
+              <MapPinned size={18} />
+              <div>
+                <strong>Rota padrão do cliente</strong>
+                <span>O vínculo será usado no mapa da rota e, mais adiante, na Agenda.</span>
+              </div>
+            </div>
+
             <label className="field">
-              Telefone / WhatsApp
-              <input value={form.telefone} onChange={(event) => setForm({ ...form, telefone: event.target.value })} placeholder="(21) 99999-9999" />
+              Dia / rota semanal
+              <select value={form.rotaId} onChange={(event) => setForm({ ...form, rotaId: event.target.value })}>
+                <option value="">Sem rota definida</option>
+                {rotas.map((rota) => (
+                  <option key={rota.id} value={rota.id}>
+                    {nomeRota(rota)} — {rota.representadas.map((item) => item.nome).join(" / ")}
+                  </option>
+                ))}
+              </select>
+              {rotas.length === 0 && <small>Cadastre primeiro as rotas semanais para vincular clientes.</small>}
             </label>
+          </div>
+
+          <div className="formGrid">
             <label className="field">
               Status
               <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
@@ -286,7 +412,7 @@ export default function ClientesPage() {
 
       <div className="search">
         <Search size={19} />
-        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por cliente, cidade, bairro, telefone, representada ou responsável..." />
+        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por cliente, endereço, rota, telefone, representada ou responsável..." />
       </div>
 
       <section className="panel">
@@ -298,32 +424,37 @@ export default function ClientesPage() {
         </div>
 
         <div className="clientList">
-          {!carregando && clientesFiltrados.map((cliente, indice) => (
-            <div className="client clientDetailed" key={cliente.id}>
-              <div className="avatar">{cliente.nome.slice(0, 1).toUpperCase()}</div>
-              <div className="clientInfo">
-                <strong>{cliente.nome}</strong>
-                <span>{[cliente.bairro, cliente.cidade].filter(Boolean).join(" • ") || "Local não informado"}</span>
-                {cliente.telefone && <span>{cliente.telefone}</span>}
-                <div className="representadasTags">
-                  {cliente.representadas.map((representada) => (
-                    <span className="tag" key={representada.id}>{representada.nome}</span>
-                  ))}
+          {!carregando && clientesFiltrados.map((cliente, indice) => {
+            const rota = cliente.rotaId ? rotasPorId.get(cliente.rotaId) : null;
+            return (
+              <div className="client clientDetailed" key={cliente.id}>
+                <div className="avatar">{cliente.nome.slice(0, 1).toUpperCase()}</div>
+                <div className="clientInfo">
+                  <strong>{cliente.nome}</strong>
+                  <span>{enderecoResumido(cliente)}</span>
+                  {cliente.cep && <span>CEP: {cliente.cep}</span>}
+                  {cliente.telefone && <span>{cliente.telefone}</span>}
+                  <div className="representadasTags">
+                    {cliente.representadas.map((representada) => (
+                      <span className="tag" key={representada.id}>{representada.nome}</span>
+                    ))}
+                    {rota && <span className="tag routeTag"><MapPinned size={11} /> {nomesDias[rota.diaSemana]}</span>}
+                  </div>
                 </div>
+                <span className={cliente.responsavelTipo === "preposto" ? "adminBadge" : "tag"}>
+                  {cliente.responsavelTipo === "preposto"
+                    ? `Preposto: ${cliente.responsavelNome ?? "Não identificado"}`
+                    : "Titular"}
+                </span>
+                <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>{cliente.status}</span>
+                {podeEditar && (
+                  <button className="iconBtn editDataButton" type="button" onClick={() => editar(cliente)} title="Editar cliente">
+                    <Pencil size={15} />
+                  </button>
+                )}
               </div>
-              <span className={cliente.responsavelTipo === "preposto" ? "adminBadge" : "tag"}>
-                {cliente.responsavelTipo === "preposto"
-                  ? `Preposto: ${cliente.responsavelNome ?? "Não identificado"}`
-                  : "Titular"}
-              </span>
-              <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>{cliente.status}</span>
-              {podeEditar && (
-                <button className="iconBtn editDataButton" type="button" onClick={() => editar(cliente)} title="Editar cliente">
-                  <Pencil size={15} />
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {!carregando && clientesFiltrados.length === 0 && <div className="emptyState">Nenhum cliente cadastrado ainda.</div>}
         </div>
