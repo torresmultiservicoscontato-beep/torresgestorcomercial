@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, Map as MapIcon, MapPinned, Pencil, Save, X } from "lucide-react";
+import { Building2, Map as MapIcon, MapPinned, Pencil, Save, UsersRound, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import RouteMap from "../components/RouteMap";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
+import { listarPrepostos, type Preposto } from "../lib/prepostos";
 import {
   atualizarCoordenadasClienteRota,
   listarClientesMapaRota,
@@ -39,40 +40,65 @@ function formularioVazio(diaSemana: number) {
 export default function RotasPage() {
   const [rotas, setRotas] = useState<RotaSemanal[]>([]);
   const [representadas, setRepresentadas] = useState<RepresentadaRota[]>([]);
+  const [prepostos, setPrepostos] = useState<Preposto[]>([]);
+  const [responsavelVisualizado, setResponsavelVisualizado] = useState("");
+  const [nomeResponsavelVisualizado, setNomeResponsavelVisualizado] = useState("Titular");
   const [editandoDia, setEditandoDia] = useState<number | null>(null);
   const [form, setForm] = useState(formularioVazio(1));
   const [carregando, setCarregando] = useState(true);
+  const [carregandoResponsavel, setCarregandoResponsavel] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
+  const [podeVerEquipe, setPodeVerEquipe] = useState(false);
   const [mapaRota, setMapaRota] = useState<RotaSemanal | null>(null);
+  const [mapaResponsavelNome, setMapaResponsavelNome] = useState("Titular");
   const [clientesMapa, setClientesMapa] = useState<ClienteMapaRota[]>([]);
   const [carregandoMapa, setCarregandoMapa] = useState(false);
 
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([
-      listarRotasSemanais(),
-      listarRepresentadasParaRotas(),
-      carregarAcessoAtual(),
-    ])
-      .then(([listaRotas, listaRepresentadas, acesso]) => {
+    async function carregar() {
+      try {
+        const [listaRotas, listaRepresentadas, acesso] = await Promise.all([
+          listarRotasSemanais(),
+          listarRepresentadasParaRotas(),
+          carregarAcessoAtual(),
+        ]);
+
         if (!ativo) return;
         setRotas(listaRotas);
         setRepresentadas(listaRepresentadas);
         setPodeCadastrar(pode(acesso, "rotas", "cadastrar"));
         setPodeEditar(pode(acesso, "rotas", "editar"));
-      })
-      .catch((falha: Error) => {
+
+        if (acesso && acesso.papel !== "preposto") {
+          try {
+            const equipe = await listarPrepostos();
+            if (!ativo) return;
+            setPrepostos(
+              equipe.filter((preposto) => preposto.status === "ativo" && Boolean(preposto.userId)),
+            );
+            setPodeVerEquipe(true);
+          } catch {
+            if (ativo) {
+              setPrepostos([]);
+              setPodeVerEquipe(false);
+            }
+          }
+        }
+      } catch (falha) {
         if (!ativo) return;
-        setErro(falha.message);
-      })
-      .finally(() => {
+        setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as rotas.");
+      } finally {
         if (ativo) setCarregando(false);
-      });
+      }
+    }
+
+    void carregar();
 
     return () => {
       ativo = false;
@@ -84,7 +110,35 @@ export default function RotasPage() {
     [rotas],
   );
 
+  const visualizandoPreposto = Boolean(responsavelVisualizado);
+
+  async function trocarResponsavel(userId: string) {
+    if (carregandoResponsavel) return;
+
+    const preposto = prepostos.find((item) => item.userId === userId);
+    setResponsavelVisualizado(userId);
+    setNomeResponsavelVisualizado(preposto?.nome ?? "Titular");
+    setEditandoDia(null);
+    setMapaRota(null);
+    setClientesMapa([]);
+    setErro("");
+    setMensagem("");
+    setCarregandoResponsavel(true);
+
+    try {
+      const novasRotas = await listarRotasSemanais(userId || undefined);
+      setRotas(novasRotas);
+      setNomeResponsavelVisualizado(userId ? preposto?.nome ?? "Preposto" : "Titular");
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as rotas deste responsável.");
+    } finally {
+      setCarregandoResponsavel(false);
+    }
+  }
+
   function abrirCadastro(diaSemana: number) {
+    if (visualizandoPreposto) return;
+
     const rota = rotasPorDia.get(diaSemana);
     setEditandoDia(diaSemana);
     setErro("");
@@ -119,6 +173,7 @@ export default function RotasPage() {
 
   async function abrirMapa(rota: RotaSemanal) {
     setMapaRota(rota);
+    setMapaResponsavelNome(nomeResponsavelVisualizado);
     setClientesMapa([]);
     setCarregandoMapa(true);
     setErro("");
@@ -143,7 +198,7 @@ export default function RotasPage() {
 
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (salvando || editandoDia === null) return;
+    if (salvando || editandoDia === null || visualizandoPreposto) return;
 
     const bairros = form.bairrosTexto
       .split(",")
@@ -190,9 +245,45 @@ export default function RotasPage() {
         <div>
           <p className="eyebrow">PLANEJAMENTO COMERCIAL</p>
           <h1>Rotas semanais</h1>
-          <p>Cadastre a rota padrão de cada dia e abra o mapa para visualizar os clientes vinculados e os pontos de parada.</p>
+          <p>Cadastre a rota padrão de cada dia e acompanhe também as rotas e os clientes dos seus prepostos.</p>
         </div>
       </header>
+
+      {podeVerEquipe && prepostos.length > 0 && (
+        <section className="panel routeTeamViewer">
+          <div className="routeTeamViewerTitle">
+            <UsersRound size={19} />
+            <div>
+              <strong>Visualização da equipe</strong>
+              <span>O titular pode consultar as rotas e os mapas dos prepostos vinculados à sua operação.</span>
+            </div>
+          </div>
+
+          <label className="field routeTeamSelect">
+            Visualizar rotas de
+            <select
+              value={responsavelVisualizado}
+              disabled={carregandoResponsavel}
+              onChange={(event) => void trocarResponsavel(event.target.value)}
+            >
+              <option value="">Titular / minhas rotas</option>
+              {prepostos.map((preposto) => (
+                <option key={preposto.id} value={preposto.userId ?? ""}>{preposto.nome}</option>
+              ))}
+            </select>
+          </label>
+
+          <span className={visualizandoPreposto ? "adminBadge routeViewingBadge" : "tag routeViewingBadge"}>
+            {carregandoResponsavel ? "Carregando..." : visualizandoPreposto ? `Preposto: ${nomeResponsavelVisualizado}` : "Titular"}
+          </span>
+        </section>
+      )}
+
+      {visualizandoPreposto && (
+        <div className="loginAlert success settingsAlert">
+          Visualização de supervisão: você está vendo as rotas e os clientes de {nomeResponsavelVisualizado}. As rotas do preposto ficam somente para consulta neste painel.
+        </div>
+      )}
 
       {erro && <div className="loginAlert error settingsAlert">{erro}</div>}
       {mensagem && <div className="loginAlert success settingsAlert">{mensagem}</div>}
@@ -201,13 +292,13 @@ export default function RotasPage() {
         {dias.map((dia) => {
           const rota = rotasPorDia.get(dia.id);
           const estaEditando = editandoDia === dia.id;
-          const podeAbrir = rota ? podeEditar : podeCadastrar;
+          const podeAbrir = !visualizandoPreposto && (rota ? podeEditar : podeCadastrar);
 
           return (
             <article className="panel routeCard" key={dia.id}>
               <div className="panelTitle routeCardHeader">
                 <div>
-                  <p className="eyebrow">ROTA PADRÃO</p>
+                  <p className="eyebrow">{visualizandoPreposto ? `ROTA DE ${nomeResponsavelVisualizado.toUpperCase()}` : "ROTA PADRÃO"}</p>
                   <h2>{dia.nome}</h2>
                 </div>
                 <div className="routeCardActions">
@@ -311,7 +402,7 @@ export default function RotasPage() {
                   </div>
 
                   <button className="secondary wide routeOpenMap" type="button" onClick={() => void abrirMapa(rota)}>
-                    <MapIcon size={16} /> Ver mapa da rota
+                    <MapIcon size={16} /> {visualizandoPreposto ? `Ver clientes de ${nomeResponsavelVisualizado} no mapa` : "Ver mapa da rota"}
                   </button>
 
                   {rota.observacao && <p>{rota.observacao}</p>}
@@ -319,9 +410,13 @@ export default function RotasPage() {
               ) : (
                 <div className="routeEmpty">
                   <MapPinned size={24} />
-                  <strong>Rota não cadastrada</strong>
-                  <span>Defina município ou bairros e as representadas deste dia.</span>
-                  {podeCadastrar && (
+                  <strong>{visualizandoPreposto ? "Rota não cadastrada pelo preposto" : "Rota não cadastrada"}</strong>
+                  <span>
+                    {visualizandoPreposto
+                      ? `${nomeResponsavelVisualizado} não possui rota cadastrada para este dia.`
+                      : "Defina município ou bairros e as representadas deste dia."}
+                  </span>
+                  {podeCadastrar && !visualizandoPreposto && (
                     <button className="secondary" type="button" onClick={() => abrirCadastro(dia.id)}>
                       Cadastrar rota
                     </button>
@@ -333,13 +428,14 @@ export default function RotasPage() {
         })}
       </section>
 
-      {carregando && <section className="panel settingsPanel">Carregando rotas...</section>}
+      {(carregando || carregandoResponsavel) && <section className="panel settingsPanel">Carregando rotas...</section>}
       {carregandoMapa && <div className="routeMapLoading">Carregando clientes do mapa...</div>}
 
       {mapaRota && !carregandoMapa && (
         <RouteMap
           rota={mapaRota}
           clientes={clientesMapa}
+          responsavelNome={mapaResponsavelNome}
           onClose={() => setMapaRota(null)}
           onCoordenadas={salvarCoordenadas}
         />
