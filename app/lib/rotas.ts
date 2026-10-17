@@ -100,7 +100,7 @@ async function resolverContexto(acao: "visualizar" | "cadastrar" | "editar") {
     ? user.id
     : prepostoAdministrado?.userId ?? titularUserId;
 
-  return { cliente, acesso, titularUserId, responsavelUserId };
+  return { cliente, acesso, titularUserId, responsavelUserId, userIdLogado: user.id };
 }
 
 function mapearRota(row: RotaRow): RotaSemanal {
@@ -117,11 +117,16 @@ function mapearRota(row: RotaRow): RotaSemanal {
   };
 }
 
-export async function listarRotasSemanais(): Promise<RotaSemanal[]> {
-  const { cliente, titularUserId, responsavelUserId } = await resolverContexto("visualizar");
+export async function listarRotasSemanais(responsavelUserIdOverride?: string): Promise<RotaSemanal[]> {
+  const contexto = await resolverContexto("visualizar");
+  const responsavelUserId = responsavelUserIdOverride || contexto.responsavelUserId;
 
-  const { data, error } = await cliente.rpc("listar_rotas_semanais", {
-    p_titular_user_id: titularUserId,
+  if (contexto.acesso.papel === "preposto" && responsavelUserId !== contexto.userIdLogado) {
+    throw new Error("O preposto só pode consultar as próprias rotas.");
+  }
+
+  const { data, error } = await contexto.cliente.rpc("listar_rotas_semanais", {
+    p_titular_user_id: contexto.titularUserId,
     p_responsavel_user_id: responsavelUserId,
   });
 
