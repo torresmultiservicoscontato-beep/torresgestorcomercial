@@ -1,13 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, MapPinned, Pencil, Save, X } from "lucide-react";
+import { Building2, Map as MapIcon, MapPinned, Pencil, Save, X } from "lucide-react";
 import AppShell from "../components/AppShell";
+import RouteMap from "../components/RouteMap";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
+  atualizarCoordenadasClienteRota,
+  listarClientesMapaRota,
   listarRepresentadasParaRotas,
   listarRotasSemanais,
   salvarRotaSemanal,
+  type ClienteMapaRota,
   type RepresentadaRota,
   type RotaSemanal,
 } from "../lib/rotas";
@@ -43,6 +47,9 @@ export default function RotasPage() {
   const [mensagem, setMensagem] = useState("");
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
+  const [mapaRota, setMapaRota] = useState<RotaSemanal | null>(null);
+  const [clientesMapa, setClientesMapa] = useState<ClienteMapaRota[]>([]);
+  const [carregandoMapa, setCarregandoMapa] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -110,6 +117,30 @@ export default function RotasPage() {
     }));
   }
 
+  async function abrirMapa(rota: RotaSemanal) {
+    setMapaRota(rota);
+    setClientesMapa([]);
+    setCarregandoMapa(true);
+    setErro("");
+
+    try {
+      const clientes = await listarClientesMapaRota(rota.id);
+      setClientesMapa(clientes);
+    } catch (falha) {
+      setMapaRota(null);
+      setErro(falha instanceof Error ? falha.message : "Não foi possível abrir o mapa desta rota.");
+    } finally {
+      setCarregandoMapa(false);
+    }
+  }
+
+  async function salvarCoordenadas(clienteId: string, latitude: number, longitude: number) {
+    await atualizarCoordenadasClienteRota(clienteId, latitude, longitude);
+    setClientesMapa((lista) => lista.map((cliente) =>
+      cliente.id === clienteId ? { ...cliente, latitude, longitude } : cliente,
+    ));
+  }
+
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (salvando || editandoDia === null) return;
@@ -159,7 +190,7 @@ export default function RotasPage() {
         <div>
           <p className="eyebrow">PLANEJAMENTO COMERCIAL</p>
           <h1>Rotas semanais</h1>
-          <p>Cadastre a rota padrão de cada dia da semana por município, bairros e representadas.</p>
+          <p>Cadastre a rota padrão de cada dia e abra o mapa para visualizar os clientes vinculados e os pontos de parada.</p>
         </div>
       </header>
 
@@ -179,11 +210,18 @@ export default function RotasPage() {
                   <p className="eyebrow">ROTA PADRÃO</p>
                   <h2>{dia.nome}</h2>
                 </div>
-                {podeAbrir && !estaEditando && (
-                  <button className="iconBtn" type="button" onClick={() => abrirCadastro(dia.id)} title={rota ? "Editar rota" : "Cadastrar rota"}>
-                    {rota ? <Pencil size={15} /> : <MapPinned size={16} />}
-                  </button>
-                )}
+                <div className="routeCardActions">
+                  {rota && !estaEditando && (
+                    <button className="iconBtn routeMapButton" type="button" onClick={() => void abrirMapa(rota)} title="Abrir mapa da rota">
+                      <MapIcon size={16} />
+                    </button>
+                  )}
+                  {podeAbrir && !estaEditando && (
+                    <button className="iconBtn" type="button" onClick={() => abrirCadastro(dia.id)} title={rota ? "Editar rota" : "Cadastrar rota"}>
+                      {rota ? <Pencil size={15} /> : <MapPinned size={16} />}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {estaEditando ? (
@@ -272,6 +310,10 @@ export default function RotasPage() {
                     ))}
                   </div>
 
+                  <button className="secondary wide routeOpenMap" type="button" onClick={() => void abrirMapa(rota)}>
+                    <MapIcon size={16} /> Ver mapa da rota
+                  </button>
+
                   {rota.observacao && <p>{rota.observacao}</p>}
                 </div>
               ) : (
@@ -292,6 +334,16 @@ export default function RotasPage() {
       </section>
 
       {carregando && <section className="panel settingsPanel">Carregando rotas...</section>}
+      {carregandoMapa && <div className="routeMapLoading">Carregando clientes do mapa...</div>}
+
+      {mapaRota && !carregandoMapa && (
+        <RouteMap
+          rota={mapaRota}
+          clientes={clientesMapa}
+          onClose={() => setMapaRota(null)}
+          onCoordenadas={salvarCoordenadas}
+        />
+      )}
     </AppShell>
   );
 }
