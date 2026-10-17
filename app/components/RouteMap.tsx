@@ -128,17 +128,12 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
     setClientesLocais(clientes);
   }, [clientes]);
 
-  const clientesFiltrados = useMemo(() => {
-    const filtrados = representadaId
+  const clientesFiltrados = useMemo(
+    () => representadaId
       ? clientesLocais.filter((cliente) => cliente.representadas.some((item) => item.id === representadaId))
-      : clientesLocais;
-
-    return [...filtrados].sort((a, b) => {
-      const ordemA = a.ordem ?? Number.MAX_SAFE_INTEGER;
-      const ordemB = b.ordem ?? Number.MAX_SAFE_INTEGER;
-      return ordemA - ordemB || a.nome.localeCompare(b.nome, "pt-BR");
-    });
-  }, [clientesLocais, representadaId]);
+      : clientesLocais,
+    [clientesLocais, representadaId],
+  );
 
   useEffect(() => {
     let cancelado = false;
@@ -222,7 +217,10 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
           }
         });
 
-        const pontos = comCoordenadas.map((cliente, indice) => {
+        const pontosTodos: Array<[number, number]> = [];
+        const grupos = new Map<string, Array<[number, number]>>();
+
+        comCoordenadas.forEach((cliente, indice) => {
           const latitude = cliente.latitude as number;
           const longitude = cliente.longitude as number;
           const icone = L.divIcon({
@@ -231,15 +229,23 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
             iconSize: [30, 30],
             iconAnchor: [15, 30],
           });
+          const responsavel = cliente.responsavelNome ? `<br><small>Responsável: ${cliente.responsavelNome}</small>` : "";
 
           L.marker([latitude, longitude], { icon: icone })
             .addTo(mapa)
-            .bindPopup(`<strong>${cliente.nome}</strong><br>${enderecoExibicao(cliente)}`);
+            .bindPopup(`<strong>${cliente.nome}</strong><br>${enderecoExibicao(cliente)}${responsavel}`);
 
-          return [latitude, longitude] as [number, number];
+          const ponto: [number, number] = [latitude, longitude];
+          pontosTodos.push(ponto);
+          const chaveGrupo = cliente.grupoRotaId || cliente.responsavelNome || "rota";
+          const pontosGrupo = grupos.get(chaveGrupo) ?? [];
+          pontosGrupo.push(ponto);
+          grupos.set(chaveGrupo, pontosGrupo);
         });
 
-        if (pontos.length > 1) {
+        for (const pontos of grupos.values()) {
+          if (pontos.length < 2) continue;
+
           let desenhouRuas = false;
           try {
             const coordenadasOsrm = pontos.map(([lat, lng]) => `${lng},${lat}`).join(";");
@@ -265,7 +271,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
           }
         }
 
-        const limites = L.latLngBounds(pontos);
+        const limites = L.latLngBounds(pontosTodos);
         mapa.fitBounds(limites, { padding: [35, 35], maxZoom: 15 });
         window.setTimeout(() => mapa.invalidateSize(), 100);
       } catch (falha) {
@@ -298,7 +304,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
             <p className="eyebrow">MAPA DA ROTA</p>
             <h2>{rota.municipio || "Rota semanal"}</h2>
             <span>{rota.bairros.join(" • ") || "Sem bairros definidos"}</span>
-            <span className="routeMapOwner"><UserRound size={12} /> Responsável: {responsavelNome}</span>
+            <span className="routeMapOwner"><UserRound size={12} /> {responsavelNome}</span>
           </div>
           <button className="iconBtn" type="button" onClick={onClose} title="Fechar mapa">
             <X size={18} />
@@ -334,6 +340,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
                   <strong>{cliente.nome}</strong>
                   <span>{enderecoExibicao(cliente)}</span>
                   <small>{cliente.representadas.map((item) => item.nome).join(" • ") || "Sem representada"}</small>
+                  {cliente.responsavelNome && <small className="routeStopOwner">Responsável: {cliente.responsavelNome}</small>}
                   {(cliente.latitude === null || cliente.longitude === null) && (
                     <small className="routeStopWarning">Aguardando localização do endereço</small>
                   )}
@@ -350,7 +357,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
         </div>
 
         <div className="routeMapFooter">
-          <small>O mapa usa os endereços cadastrados dos clientes. A linha segue o trajeto viário quando o serviço de roteamento está disponível e usa ligação tracejada entre os pontos como alternativa.</small>
+          <small>Quando mais de um responsável estiver selecionado, cada rota é traçada separadamente para não misturar o percurso do titular com o dos prepostos.</small>
         </div>
       </div>
     </div>
