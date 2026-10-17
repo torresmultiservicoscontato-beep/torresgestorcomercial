@@ -55,12 +55,14 @@ export default function ClientesPage() {
   const [clientes, setClientes] = useState<ClienteDetalhado[]>([]);
   const [representadas, setRepresentadas] = useState<RepresentadaOperacional[]>([]);
   const [rotas, setRotas] = useState<RotaSemanal[]>([]);
+  const [rotasFormulario, setRotasFormulario] = useState<RotaSemanal[]>([]);
   const [busca, setBusca] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState(formInicial);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
+  const [carregandoRotasFormulario, setCarregandoRotasFormulario] = useState(false);
   const [erro, setErro] = useState("");
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
@@ -84,6 +86,7 @@ export default function ClientesPage() {
         setClientes(listaClientes);
         setRepresentadas(listaRepresentadas);
         setRotas(listaRotas);
+        setRotasFormulario(listaRotas);
         setPodeCadastrar(pode(acesso, "clientes", "cadastrar"));
         setPodeEditar(pode(acesso, "clientes", "editar"));
         setForm((atual) => ({
@@ -111,6 +114,10 @@ export default function ClientesPage() {
   }, []);
 
   const rotasPorId = useMemo(() => new Map(rotas.map((rota) => [rota.id, rota])), [rotas]);
+  const rotasFormularioPorId = useMemo(
+    () => new Map(rotasFormulario.map((rota) => [rota.id, rota])),
+    [rotasFormulario],
+  );
 
   const clientesFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -145,6 +152,7 @@ export default function ClientesPage() {
     setEditandoId(null);
     setMostrarForm(false);
     setErro("");
+    setRotasFormulario(rotas);
     setForm({ ...formInicial, representadaIds: representadasPadrao() });
   }
 
@@ -157,8 +165,9 @@ export default function ClientesPage() {
     }));
   }
 
-  function editar(cliente: ClienteDetalhado) {
+  async function editar(cliente: ClienteDetalhado) {
     if (!podeEditar) return;
+
     setEditandoId(cliente.id);
     setForm({
       nome: cliente.nome,
@@ -175,7 +184,22 @@ export default function ClientesPage() {
     });
     setMostrarForm(true);
     setErro("");
+    setCarregandoRotasFormulario(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      const rotasDoResponsavel = await listarRotasSemanais(cliente.responsavelUserId);
+      setRotasFormulario(rotasDoResponsavel);
+
+      if (cliente.rotaId && !rotasDoResponsavel.some((rota) => rota.id === cliente.rotaId)) {
+        setForm((atual) => ({ ...atual, rotaId: "" }));
+      }
+    } catch (falha) {
+      setRotasFormulario([]);
+      setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as rotas deste responsável.");
+    } finally {
+      setCarregandoRotasFormulario(false);
+    }
   }
 
   async function salvarCliente(event: FormEvent<HTMLFormElement>) {
@@ -197,9 +221,9 @@ export default function ClientesPage() {
       return;
     }
 
-    const rotaSelecionada = form.rotaId ? rotasPorId.get(form.rotaId) : null;
+    const rotaSelecionada = form.rotaId ? rotasFormularioPorId.get(form.rotaId) : null;
     if (form.rotaId && !rotaSelecionada) {
-      setErro("A rota selecionada não está mais disponível.");
+      setErro("A rota selecionada não está mais disponível para o responsável deste cliente.");
       return;
     }
 
@@ -276,6 +300,7 @@ export default function ClientesPage() {
             onClick={() => {
               if (mostrarForm) fecharFormulario();
               else {
+                setRotasFormulario(rotas);
                 setForm({ ...formInicial, representadaIds: representadasPadrao() });
                 setMostrarForm(true);
               }
@@ -377,15 +402,25 @@ export default function ClientesPage() {
 
             <label className="field">
               Dia / rota semanal
-              <select value={form.rotaId} onChange={(event) => setForm({ ...form, rotaId: event.target.value })}>
-                <option value="">Sem rota definida</option>
-                {rotas.map((rota) => (
+              <select
+                value={form.rotaId}
+                disabled={carregandoRotasFormulario}
+                onChange={(event) => setForm({ ...form, rotaId: event.target.value })}
+              >
+                <option value="">{carregandoRotasFormulario ? "Carregando rotas..." : "Sem rota definida"}</option>
+                {rotasFormulario.map((rota) => (
                   <option key={rota.id} value={rota.id}>
                     {nomeRota(rota)} — {rota.representadas.map((item) => item.nome).join(" / ")}
                   </option>
                 ))}
               </select>
-              {rotas.length === 0 && <small>Cadastre primeiro as rotas semanais para vincular clientes.</small>}
+              {!carregandoRotasFormulario && rotasFormulario.length === 0 && (
+                <small>
+                  {editandoId
+                    ? "Este responsável ainda não possui uma rota semanal cadastrada. Cadastre a rota no painel dele antes de vincular este cliente."
+                    : "Cadastre primeiro as rotas semanais para vincular clientes."}
+                </small>
+              )}
             </label>
           </div>
 
@@ -403,7 +438,7 @@ export default function ClientesPage() {
 
           <div className="formActions">
             <button className="secondary" type="button" onClick={fecharFormulario}>Cancelar</button>
-            <button className="primary" type="submit" disabled={salvando || representadas.length === 0}>
+            <button className="primary" type="submit" disabled={salvando || representadas.length === 0 || carregandoRotasFormulario}>
               {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar cliente"}
             </button>
           </div>
@@ -448,7 +483,7 @@ export default function ClientesPage() {
                 </span>
                 <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>{cliente.status}</span>
                 {podeEditar && (
-                  <button className="iconBtn editDataButton" type="button" onClick={() => editar(cliente)} title="Editar cliente">
+                  <button className="iconBtn editDataButton" type="button" onClick={() => void editar(cliente)} title="Editar cliente">
                     <Pencil size={15} />
                   </button>
                 )}
