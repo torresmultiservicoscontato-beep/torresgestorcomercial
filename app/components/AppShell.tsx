@@ -39,7 +39,7 @@ import { supabase } from "../lib/supabase";
 const operacionais = [
   { label: "Início", href: "/", icon: Home, modulo: "inicio", enabled: true },
   { label: "Clientes", href: "/clientes", icon: Users, modulo: "clientes", enabled: true },
-  { label: "Rotas", href: "#", icon: MapPinned, modulo: "rotas", enabled: false },
+  { label: "Rotas", href: "/rotas", icon: MapPinned, modulo: "rotas", enabled: true },
   { label: "Visitas", href: "/visitas", icon: ClipboardCheck, modulo: "visitas", enabled: true },
   { label: "Vendas", href: "#", icon: ShoppingCart, modulo: "vendas", enabled: false },
   { label: "Agenda", href: "#", icon: CalendarDays, modulo: "agenda", enabled: false },
