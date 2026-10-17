@@ -31,6 +31,8 @@ export type ClienteMapaRota = {
   longitude: number | null;
   ordem: number | null;
   representadas: RepresentadaRota[];
+  responsavelNome?: string;
+  grupoRotaId?: string;
 };
 
 type RotaRow = {
