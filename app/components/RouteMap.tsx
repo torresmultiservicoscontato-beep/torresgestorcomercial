@@ -178,17 +178,17 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
   const clientesNumerados = useMemo(() => {
     const contadores = new Map<string, number>();
     return clientesFiltrados.map((cliente) => {
-      const grupo = cliente.grupoRotaId || cliente.responsavelNome || "titular";
+      const grupo = cliente.responsavelChave || cliente.responsavelNome || "titular";
       const proximo = (contadores.get(grupo) ?? 0) + 1;
       contadores.set(grupo, proximo);
       return { cliente, numeroRota: proximo, grupo };
     });
-  }, [clientesNumerados, clientesFiltrados.length, responsavelNome]);
+  }, [clientesFiltrados]);
 
   const legendaResponsaveis = useMemo(() => {
     const mapa = new Map<string, string>();
     clientesLocais.forEach((cliente) => {
-      const chave = cliente.grupoRotaId || cliente.responsavelNome || "titular";
+      const chave = cliente.responsavelChave || cliente.responsavelNome || "titular";
       mapa.set(chave, cliente.responsavelNome || responsavelNome || "Titular");
     });
     return Array.from(mapa.entries()).map(([chave, nome]) => ({ chave, nome, cor: corResponsavel(chave) }));
@@ -364,7 +364,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
         mapaInstanciaRef.current = null;
       }
     };
-  }, [clientesFiltrados]);
+  }, [clientesNumerados, clientesFiltrados.length, responsavelNome]);
 
   const localizados = clientesFiltrados.filter(
     (cliente) => cliente.latitude !== null && cliente.longitude !== null,
