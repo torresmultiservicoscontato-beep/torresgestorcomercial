@@ -229,7 +229,9 @@ export async function sincronizarDetalhesVendaVisita(input: {
   situacao: string;
   itens: ItemVendaInput[];
 }) {
-  const { cliente } = await resolverContexto("cadastrar");
+  const cliente = exigirSupabase();
+  const { data: sessao, error: sessaoError } = await cliente.auth.getUser();
+  if (sessaoError || !sessao.user) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
   const { data, error } = await cliente.rpc("salvar_detalhes_venda_visita", {
     p_visita_id: input.visitaId,
     p_formas_pagamento: input.formasPagamento,
