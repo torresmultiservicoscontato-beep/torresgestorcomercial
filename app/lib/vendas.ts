@@ -118,6 +118,56 @@ async function nomesResponsaveis(ids: string[]) {
   return mapa;
 }
 
+
+export type ClienteBuscaVenda = {
+  id: string;
+  nome: string;
+  cidade: string;
+  bairro: string;
+};
+
+export async function buscarClientesVenda(termo: string): Promise<ClienteBuscaVenda[]> {
+  const texto = termo.trim();
+  if (texto.length < 2) return [];
+
+  const { cliente, titularUserId, responsavelUserId } = await resolverContexto("visualizar");
+  let consulta = cliente
+    .from("clientes")
+    .select("id,nome,cidade,bairro")
+    .eq("user_id", titularUserId)
+    .ilike("nome", `%${texto.replace(/[%_]/g, "")}%`)
+    .order("nome")
+    .limit(10);
+
+  if (responsavelUserId) consulta = consulta.eq("responsavel_user_id", responsavelUserId);
+
+  const { data, error } = await consulta;
+  if (error) throw new Error(`Falha ao buscar clientes: ${error.message}`);
+
+  return (data ?? []).map((item) => ({
+    id: item.id,
+    nome: item.nome,
+    cidade: item.cidade ?? "",
+    bairro: item.bairro ?? "",
+  }));
+}
+
+export async function carregarRepresentadasFiltroVendas(): Promise<RepresentadaOperacional[]> {
+  const { cliente, titularUserId, responsavelUserId } = await resolverContexto("visualizar");
+  const responsavel = responsavelUserId ?? titularUserId;
+
+  const { data, error } = await cliente.rpc("listar_representadas_operacionais", {
+    p_titular_user_id: titularUserId,
+    p_responsavel_user_id: responsavel,
+  });
+
+  if (error) throw new Error(`Falha ao carregar representadas para o filtro: ${error.message}`);
+  return (data ?? []).map((item: { representada_id: string; nome: string }) => ({
+    id: item.representada_id,
+    nome: item.nome,
+  }));
+}
+
 export async function carregarVendas(): Promise<Venda[]> {
   const { cliente, titularUserId, responsavelUserId } = await resolverContexto("visualizar");
 
