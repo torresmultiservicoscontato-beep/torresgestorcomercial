@@ -21,6 +21,46 @@ type Props = {
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
+const CORES_RESPONSAVEIS = [
+  "#1e63d6", "#16805d", "#d97706", "#7c3aed", "#c2415d", "#0f766e", "#9333ea", "#b45309",
+];
+
+const CORES_REPRESENTADAS = [
+  "#dc2626", "#eab308", "#7c3aed", "#111827", "#0891b2", "#ea580c", "#16a34a", "#be185d",
+];
+
+function indiceEstavel(valor: string, tamanho: number) {
+  let hash = 0;
+  for (let i = 0; i < valor.length; i += 1) hash = ((hash << 5) - hash + valor.charCodeAt(i)) | 0;
+  return Math.abs(hash) % tamanho;
+}
+
+function corResponsavel(chave: string) {
+  return CORES_RESPONSAVEIS[indiceEstavel(chave || "titular", CORES_RESPONSAVEIS.length)];
+}
+
+function corRepresentada(id: string) {
+  return CORES_REPRESENTADAS[indiceEstavel(id || "sem-representada", CORES_REPRESENTADAS.length)];
+}
+
+function gradienteRepresentadas(ids: string[]) {
+  const unicos = Array.from(new Set(ids.filter(Boolean)));
+  if (unicos.length === 0) return "#cbd5e1";
+  if (unicos.length === 1) return corRepresentada(unicos[0]);
+  const passo = 100 / unicos.length;
+  return `conic-gradient(${unicos.map((id, indice) => {
+    const inicio = (indice * passo).toFixed(2);
+    const fim = ((indice + 1) * passo).toFixed(2);
+    return `${corRepresentada(id)} ${inicio}% ${fim}%`;
+  }).join(", ")})`;
+}
+
+function escaparHtml(valor: string) {
+  return valor.replace(/[&<>"']/g, (caractere) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+  }[caractere] ?? caractere));
+}
+
 function esperar(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -135,6 +175,33 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
     [clientesLocais, representadaId],
   );
 
+  const clientesNumerados = useMemo(() => {
+    const contadores = new Map<string, number>();
+    return clientesFiltrados.map((cliente) => {
+      const grupo = cliente.grupoRotaId || cliente.responsavelNome || "titular";
+      const proximo = (contadores.get(grupo) ?? 0) + 1;
+      contadores.set(grupo, proximo);
+      return { cliente, numeroRota: proximo, grupo };
+    });
+  }, [clientesNumerados, clientesFiltrados.length, responsavelNome]);
+
+  const legendaResponsaveis = useMemo(() => {
+    const mapa = new Map<string, string>();
+    clientesLocais.forEach((cliente) => {
+      const chave = cliente.grupoRotaId || cliente.responsavelNome || "titular";
+      mapa.set(chave, cliente.responsavelNome || responsavelNome || "Titular");
+    });
+    return Array.from(mapa.entries()).map(([chave, nome]) => ({ chave, nome, cor: corResponsavel(chave) }));
+  }, [clientesLocais, responsavelNome]);
+
+  const legendaRepresentadas = useMemo(() => {
+    const mapa = new Map<string, string>();
+    clientesLocais.forEach((cliente) => cliente.representadas.forEach((item) => mapa.set(item.id, item.nome)));
+    return Array.from(mapa.entries())
+      .map(([id, nome]) => ({ id, nome, cor: corRepresentada(id) }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [clientesLocais]);
+
   useEffect(() => {
     let cancelado = false;
 
@@ -180,8 +247,8 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
     async function desenharMapa() {
       if (!mapaElementoRef.current) return;
 
-      const comCoordenadas = clientesFiltrados.filter(
-        (cliente) => cliente.latitude !== null && cliente.longitude !== null,
+      const comCoordenadas = clientesNumerados.filter(
+        ({ cliente }) => cliente.latitude !== null && cliente.longitude !== null,
       );
 
       if (mapaInstanciaRef.current) {
@@ -201,7 +268,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
         if (cancelado || !L || !mapaElementoRef.current) return;
 
         setMensagemMapa("");
-        const primeiro = comCoordenadas[0];
+        const primeiro = comCoordenadas[0].cliente;
         const mapa = L.map(mapaElementoRef.current, { zoomControl: true }).setView(
           [primeiro.latitude, primeiro.longitude],
           13,
@@ -220,30 +287,37 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
         const pontosTodos: Array<[number, number]> = [];
         const grupos = new Map<string, Array<[number, number]>>();
 
-        comCoordenadas.forEach((cliente, indice) => {
+        comCoordenadas.forEach(({ cliente, numeroRota, grupo }) => {
           const latitude = cliente.latitude as number;
           const longitude = cliente.longitude as number;
+          const preenchimento = corResponsavel(grupo);
+          const contorno = gradienteRepresentadas(cliente.representadas.map((item) => item.id));
           const icone = L.divIcon({
             className: "routeMapMarkerShell",
-            html: `<span class="routeMapMarker">${indice + 1}</span>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 30],
+            html: `<span class="routeMapMarkerRing" style="background:${contorno}"><span class="routeMapMarkerInner" style="background:${preenchimento}">${numeroRota}</span></span>`,
+            iconSize: [34, 34],
+            iconAnchor: [17, 34],
           });
-          const responsavel = cliente.responsavelNome ? `<br><small>Responsável: ${cliente.responsavelNome}</small>` : "";
+          const responsavel = cliente.responsavelNome || responsavelNome || "Titular";
+          const representadasPopup = cliente.representadas.map((item) => escaparHtml(item.nome)).join(" • ");
 
           L.marker([latitude, longitude], { icon: icone })
             .addTo(mapa)
-            .bindPopup(`<strong>${cliente.nome}</strong><br>${enderecoExibicao(cliente)}${responsavel}`);
+            .bindPopup(
+              `<strong>${escaparHtml(cliente.nome)}</strong><br>${escaparHtml(enderecoExibicao(cliente))}` +
+              `<br><small>Responsável: ${escaparHtml(responsavel)}</small>` +
+              (representadasPopup ? `<br><small>Representadas: ${representadasPopup}</small>` : "") +
+              `<br><small>Parada nº ${numeroRota}</small>`,
+            );
 
           const ponto: [number, number] = [latitude, longitude];
           pontosTodos.push(ponto);
-          const chaveGrupo = cliente.grupoRotaId || cliente.responsavelNome || "rota";
-          const pontosGrupo = grupos.get(chaveGrupo) ?? [];
+          const pontosGrupo = grupos.get(grupo) ?? [];
           pontosGrupo.push(ponto);
-          grupos.set(chaveGrupo, pontosGrupo);
+          grupos.set(grupo, pontosGrupo);
         });
 
-        for (const pontos of grupos.values()) {
+        for (const [grupo, pontos] of grupos.entries()) {
           if (pontos.length < 2) continue;
 
           let desenhouRuas = false;
@@ -257,7 +331,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
               const geometria = dados.routes?.[0]?.geometry;
               if (geometria && !cancelado) {
                 L.geoJSON(geometria, {
-                  style: { color: "#1e63d6", weight: 4, opacity: 0.8, dashArray: "9 8" },
+                  style: { color: corResponsavel(grupo), weight: 4, opacity: 0.82, dashArray: "9 8" },
                 }).addTo(mapa);
                 desenhouRuas = true;
               }
@@ -267,7 +341,7 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
           }
 
           if (!desenhouRuas) {
-            L.polyline(pontos, { color: "#1e63d6", weight: 4, opacity: 0.8, dashArray: "9 8" }).addTo(mapa);
+            L.polyline(pontos, { color: corResponsavel(grupo), weight: 4, opacity: 0.82, dashArray: "9 8" }).addTo(mapa);
           }
         }
 
@@ -333,9 +407,15 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
               <Navigation size={17} />
               <strong>Pontos de parada</strong>
             </div>
-            {clientesFiltrados.map((cliente, indice) => (
+            {clientesNumerados.map(({ cliente, numeroRota, grupo }) => (
               <article className="routeStop" key={cliente.id}>
-                <span className="routeStopNumber">{indice + 1}</span>
+                <span
+                  className="routeStopNumber routeStopNumberColored"
+                  style={{
+                    background: corResponsavel(grupo),
+                    border: `3px solid ${cliente.representadas[0] ? corRepresentada(cliente.representadas[0].id) : "#cbd5e1"}`,
+                  }}
+                >{numeroRota}</span>
                 <div>
                   <strong>{cliente.nome}</strong>
                   <span>{enderecoExibicao(cliente)}</span>
@@ -356,8 +436,31 @@ export default function RouteMap({ rota, clientes, responsavelNome = "Titular", 
           </div>
         </div>
 
+        <div className="routeMapLegend">
+          <div>
+            <strong>Responsáveis — preenchimento</strong>
+            <div className="routeLegendItems">
+              {legendaResponsaveis.map((item) => (
+                <span className="routeLegendItem" key={item.chave}>
+                  <i style={{ background: item.cor }} /> {item.nome}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <strong>Representadas — contorno</strong>
+            <div className="routeLegendItems">
+              {legendaRepresentadas.map((item) => (
+                <span className="routeLegendItem" key={item.id}>
+                  <i className="routeLegendRing" style={{ borderColor: item.cor }} /> {item.nome}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="routeMapFooter">
-          <small>Quando mais de um responsável estiver selecionado, cada rota é traçada separadamente para não misturar o percurso do titular com o dos prepostos.</small>
+          <small>O preenchimento identifica o responsável; o contorno identifica as representadas. Clientes com mais de uma representada usam o anel dividido em cores. O número é a ordem da parada dentro da rota de cada responsável.</small>
         </div>
       </div>
     </div>
