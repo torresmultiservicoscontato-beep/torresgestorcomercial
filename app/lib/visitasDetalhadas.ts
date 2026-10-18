@@ -3,6 +3,7 @@ import { limparRepresentanteAdministrado, obterRepresentanteAdministrado } from 
 import { limparPrepostoAdministrado, obterPrepostoAdministrado } from "./prepostoContext";
 import { supabase } from "./supabase";
 import type { RepresentadaOperacional } from "./data";
+import { sincronizarDetalhesVendaVisita, type ItemVendaInput } from "./vendas";
 
 export type TipoContato = "Presencial" | "Telefone" | "WhatsApp" | "Outro";
 
@@ -26,6 +27,10 @@ export type VisitaDetalhada = {
   houveVenda: boolean;
   valorVenda: number;
   origemVenda: string;
+  formasPagamento: string[];
+  condicoesPrazo: string[];
+  situacaoVenda: string;
+  itensVenda: ItemVendaInput[];
   proximaAcao: string;
   proximaData: string;
   frequencia: string;
@@ -182,6 +187,10 @@ function mapear(row: VisitaRow, representadas: RepresentadaOperacional[]): Visit
     houveVenda: Boolean(row.houve_venda),
     valorVenda: numero(row.valor_venda),
     origemVenda: row.origem_venda ?? "",
+    formasPagamento: [],
+    condicoesPrazo: [],
+    situacaoVenda: "Pedido lançado",
+    itensVenda: [],
     proximaAcao: row.proxima_acao || "Retorno",
     proximaData: row.proxima_data ?? "",
     frequencia: row.frequencia ?? "",
@@ -208,8 +217,74 @@ export async function carregarVisitasDetalhadas(): Promise<VisitaDetalhada[]> {
   if (error) throw new Error(`Falha ao carregar visitas: ${error.message}`);
 
   const rows = (data ?? []) as VisitaRow[];
-  const representadas = await carregarRepresentadas(rows.map((row) => row.id));
-  return rows.map((row) => mapear(row, representadas.get(row.id) ?? []));
+  const visitaIds = rows.map((row) => row.id);
+  const representadas = await carregarRepresentadas(visitaIds);
+  const vendasPorVisita = new Map<string, {
+    id: string;
+    formasPagamento: string[];
+    condicoesPrazo: string[];
+    situacao: string;
+    itens: ItemVendaInput[];
+  }>();
+
+  if (visitaIds.length > 0) {
+    const { data: vendas, error: vendasError } = await cliente
+      .from("vendas")
+      .select("id,visita_id,formas_pagamento,condicoes_prazo,situacao")
+      .in("visita_id", visitaIds);
+
+    if (vendasError) throw new Error(`Falha ao carregar dados comerciais das visitas: ${vendasError.message}`);
+
+    const vendaIds = (vendas ?? []).map((item) => item.id);
+    const itensPorVenda = new Map<string, ItemVendaInput[]>();
+
+    if (vendaIds.length > 0) {
+      const { data: itens, error: itensError } = await cliente
+        .from("venda_itens")
+        .select("venda_id,representada_id,produto,codigo,quantidade,unidade,valor_unitario,valor_total")
+        .in("venda_id", vendaIds)
+        .order("created_at");
+
+      if (itensError) throw new Error(`Falha ao carregar produtos das vendas: ${itensError.message}`);
+
+      for (const item of itens ?? []) {
+        const lista = itensPorVenda.get(item.venda_id) ?? [];
+        lista.push({
+          produto: item.produto,
+          codigo: item.codigo ?? "",
+          quantidade: item.quantidade === null ? "" : String(item.quantidade),
+          unidade: item.unidade ?? "",
+          valorUnitario: item.valor_unitario === null ? "" : String(item.valor_unitario),
+          valorTotal: item.valor_total === null ? "" : String(item.valor_total),
+          representadaId: item.representada_id ?? "",
+        });
+        itensPorVenda.set(item.venda_id, lista);
+      }
+    }
+
+    for (const venda of vendas ?? []) {
+      vendasPorVisita.set(venda.visita_id, {
+        id: venda.id,
+        formasPagamento: venda.formas_pagamento ?? [],
+        condicoesPrazo: venda.condicoes_prazo ?? [],
+        situacao: venda.situacao ?? "Pedido lançado",
+        itens: itensPorVenda.get(venda.id) ?? [],
+      });
+    }
+  }
+
+  return rows.map((row) => {
+    const visita = mapear(row, representadas.get(row.id) ?? []);
+    const venda = vendasPorVisita.get(row.id);
+    if (!venda) return visita;
+    return {
+      ...visita,
+      formasPagamento: venda.formasPagamento,
+      condicoesPrazo: venda.condicoesPrazo,
+      situacaoVenda: venda.situacao,
+      itensVenda: venda.itens,
+    };
+  });
 }
 
 function decimalOuNull(valor: string) {
@@ -250,8 +325,22 @@ async function salvar(visita: VisitaDetalhada, acao: "cadastrar" | "editar") {
   const row = (Array.isArray(data) ? data[0] : data) as VisitaRow | null;
   if (!row) throw new Error("Visita não encontrada após o salvamento.");
 
+  await sincronizarDetalhesVendaVisita({
+    visitaId: row.id,
+    formasPagamento: visita.formasPagamento,
+    condicoesPrazo: visita.condicoesPrazo,
+    situacao: visita.situacaoVenda,
+    itens: visita.itensVenda,
+  });
+
   const representadas = await carregarRepresentadas([row.id]);
-  return mapear(row, representadas.get(row.id) ?? visita.representadas);
+  return {
+    ...mapear(row, representadas.get(row.id) ?? visita.representadas),
+    formasPagamento: visita.houveVenda ? visita.formasPagamento : [],
+    condicoesPrazo: visita.houveVenda ? visita.condicoesPrazo : [],
+    situacaoVenda: visita.houveVenda ? visita.situacaoVenda : "Pedido lançado",
+    itensVenda: visita.houveVenda ? visita.itensVenda : [],
+  };
 }
 
 export function criarVisitaDetalhada(visita: VisitaDetalhada) {
