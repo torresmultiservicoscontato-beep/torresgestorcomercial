@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Pencil, PhoneCall, X } from "lucide-react";
+import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Pencil, PhoneCall, Plus, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
@@ -17,6 +17,7 @@ import {
   type TipoContato,
   type VisitaDetalhada,
 } from "../lib/visitasDetalhadas";
+import type { ItemVendaInput } from "../lib/vendas";
 
 function hojeLocal() {
   const agora = new Date();
@@ -40,6 +41,11 @@ function formInicial() {
     houveVenda: false,
     valorVenda: "",
     origemVenda: "",
+    formasPagamento: [] as string[],
+    condicoesPrazo: [] as string[],
+    situacaoVenda: "Pedido lançado",
+    itensVenda: [] as ItemVendaInput[],
+    novoProduto: "",
     resultado: "Sem venda",
     proximaAcao: "Retorno",
     proximaData: "",
@@ -170,6 +176,19 @@ export default function VisitasPage() {
     [clienteSelecionado],
   );
 
+  const catalogoProdutos = useMemo(() => {
+    const mapa = new Map<string, string>();
+    visitas.forEach((visita) => visita.itensVenda.forEach((item) => {
+      const nome = item.produto.trim();
+      if (nome) mapa.set(nome.toLocaleLowerCase("pt-BR"), nome);
+    }));
+    form.itensVenda.forEach((item) => {
+      const nome = item.produto.trim();
+      if (nome) mapa.set(nome.toLocaleLowerCase("pt-BR"), nome);
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [visitas, form.itensVenda]);
+
   function encontrarVisitaAnterior(data: string, horaEntrada: string) {
     return [...visitas]
       .filter((visita) => {
@@ -255,6 +274,44 @@ export default function VisitasPage() {
     }));
   }
 
+  function alternarOpcaoVenda(campo: "formasPagamento" | "condicoesPrazo", valor: string, marcada: boolean) {
+    setForm((atual) => ({
+      ...atual,
+      [campo]: marcada
+        ? Array.from(new Set([...atual[campo], valor]))
+        : atual[campo].filter((item) => item !== valor),
+    }));
+  }
+
+  function alternarProdutoVenda(produto: string, marcado: boolean) {
+    setForm((atual) => ({
+      ...atual,
+      itensVenda: marcado
+        ? atual.itensVenda.some((item) => item.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR"))
+          ? atual.itensVenda
+          : [...atual.itensVenda, { produto, quantidade: "", unidade: "", valorUnitario: "", valorTotal: "", codigo: "", representadaId: "" }]
+        : atual.itensVenda.filter((item) => item.produto.toLocaleLowerCase("pt-BR") !== produto.toLocaleLowerCase("pt-BR")),
+    }));
+  }
+
+  function adicionarProdutoVenda() {
+    const produto = form.novoProduto.trim();
+    if (!produto) return;
+    alternarProdutoVenda(produto, true);
+    setForm((atual) => ({ ...atual, novoProduto: "" }));
+  }
+
+  function atualizarProdutoVenda(produto: string, campo: keyof ItemVendaInput, valor: string) {
+    setForm((atual) => ({
+      ...atual,
+      itensVenda: atual.itensVenda.map((item) =>
+        item.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR")
+          ? { ...item, [campo]: valor }
+          : item,
+      ),
+    }));
+  }
+
   function editar(visita: VisitaDetalhada) {
     if (!podeEditar) return;
     setEditandoId(visita.id);
@@ -271,6 +328,11 @@ export default function VisitasPage() {
       houveVenda: visita.houveVenda,
       valorVenda: visita.houveVenda ? String(visita.valorVenda) : "",
       origemVenda: visita.origemVenda,
+      formasPagamento: visita.formasPagamento,
+      condicoesPrazo: visita.condicoesPrazo,
+      situacaoVenda: visita.situacaoVenda,
+      itensVenda: visita.itensVenda,
+      novoProduto: "",
       resultado: visita.resultado,
       proximaAcao: visita.proximaAcao,
       proximaData: visita.proximaData,
@@ -352,6 +414,10 @@ export default function VisitasPage() {
       houveVenda: form.houveVenda,
       valorVenda,
       origemVenda: form.houveVenda ? form.origemVenda : "",
+      formasPagamento: form.houveVenda ? form.formasPagamento : [],
+      condicoesPrazo: form.houveVenda ? form.condicoesPrazo : [],
+      situacaoVenda: form.houveVenda ? form.situacaoVenda : "Pedido lançado",
+      itensVenda: form.houveVenda ? form.itensVenda : [],
       proximaAcao: form.proximaAcao,
       proximaData: form.proximaData,
       frequencia: form.frequencia,
@@ -620,6 +686,135 @@ export default function VisitasPage() {
                   <option>Outro</option>
                 </select>
               </label>
+
+              {form.houveVenda && (
+                <>
+                  <div className="permissionsBlock">
+                    <div className="settingsSectionTitle">
+                      <DollarSign size={17} />
+                      <div>
+                        <strong>Forma de pagamento</strong>
+                        <span>Marque uma ou mais formas usadas no pedido.</span>
+                      </div>
+                    </div>
+                    <div className="representadasChecklist">
+                      {["Boleto", "Pix", "Cartão de crédito", "Dinheiro", "Transferência"].map((forma) => {
+                        const marcada = form.formasPagamento.includes(forma);
+                        return (
+                          <label className="representadaOption" key={forma} style={marcada ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}>
+                            <input type="checkbox" checked={marcada} onChange={(event) => alternarOpcaoVenda("formasPagamento", forma, event.target.checked)} />
+                            <span><strong>{forma}</strong></span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="permissionsBlock">
+                    <div className="settingsSectionTitle">
+                      <CalendarClock size={17} />
+                      <div>
+                        <strong>Condição e prazo</strong>
+                        <span>Esses dados ficarão disponíveis para o futuro controle de liquidação e comissão.</span>
+                      </div>
+                    </div>
+                    <div className="representadasChecklist">
+                      {["À vista", "7 dias", "14 dias", "21 dias", "28 dias", "30 dias", "30/60", "30/60/90"].map((prazo) => {
+                        const marcada = form.condicoesPrazo.includes(prazo);
+                        return (
+                          <label className="representadaOption" key={prazo} style={marcada ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}>
+                            <input type="checkbox" checked={marcada} onChange={(event) => alternarOpcaoVenda("condicoesPrazo", prazo, event.target.checked)} />
+                            <span><strong>{prazo}</strong></span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="permissionsBlock">
+                    <div className="settingsSectionTitle">
+                      <ClipboardCheck size={17} />
+                      <div>
+                        <strong>Situação do pedido</strong>
+                        <span>Escolha a situação atual da venda.</span>
+                      </div>
+                    </div>
+                    <div className="representadasChecklist">
+                      {["Pedido lançado", "Faturado", "Liquidado parcial", "Liquidado", "Cancelado"].map((situacao) => (
+                        <label className="representadaOption" key={situacao} style={form.situacaoVenda === situacao ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}>
+                          <input
+                            type="radio"
+                            name="situacaoVenda"
+                            checked={form.situacaoVenda === situacao}
+                            onChange={() => setForm((atual) => ({ ...atual, situacaoVenda: situacao }))}
+                          />
+                          <span><strong>{situacao}</strong></span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="permissionsBlock">
+                    <div className="settingsSectionTitle">
+                      <Building2 size={17} />
+                      <div>
+                        <strong>Produtos e mercadorias</strong>
+                        <span>Marque produtos já usados ou cadastre um novo. A lista acompanha a venda automaticamente.</span>
+                      </div>
+                    </div>
+
+                    <div className="two">
+                      <label className="field">
+                        Novo produto / mercadoria
+                        <input value={form.novoProduto} onChange={(event) => setForm({ ...form, novoProduto: event.target.value })} placeholder="Ex.: Argamassa ACIII 20 kg" />
+                      </label>
+                      <button className="secondary" type="button" style={{ alignSelf: "end", marginBottom: 0 }} onClick={adicionarProdutoVenda}>
+                        <Plus size={15} /> Adicionar produto
+                      </button>
+                    </div>
+
+                    {catalogoProdutos.length > 0 && (
+                      <div className="representadasChecklist">
+                        {catalogoProdutos.map((produto) => {
+                          const item = form.itensVenda.find((atual) => atual.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR"));
+                          const marcada = Boolean(item);
+                          return (
+                            <label className="representadaOption" key={produto} style={marcada ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}>
+                              <input type="checkbox" checked={marcada} onChange={(event) => alternarProdutoVenda(produto, event.target.checked)} />
+                              <span><strong>{produto}</strong></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {form.itensVenda.map((item) => (
+                      <div className="formGrid" key={item.produto} style={{ marginTop: 10, padding: 10, border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}>
+                        <label className="field span2">
+                          Produto
+                          <input readOnly value={item.produto} />
+                        </label>
+                        <label className="field">
+                          Quantidade
+                          <input value={item.quantidade ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "quantidade", event.target.value)} inputMode="decimal" />
+                        </label>
+                        <label className="field">
+                          Unidade
+                          <input value={item.unidade ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "unidade", event.target.value)} placeholder="UN, CX, KG..." />
+                        </label>
+                        <label className="field">
+                          Valor unitário
+                          <input value={item.valorUnitario ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "valorUnitario", event.target.value)} inputMode="decimal" />
+                        </label>
+                        <label className="field">
+                          Valor total
+                          <input value={item.valorTotal ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "valorTotal", event.target.value)} inputMode="decimal" />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="permissionsBlock">
