@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Pencil, PhoneCall, Plus, X } from "lucide-react";
+import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Paperclip, Pencil, PhoneCall, Plus, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
@@ -17,7 +17,7 @@ import {
   type TipoContato,
   type VisitaDetalhada,
 } from "../lib/visitasDetalhadas";
-import type { ItemVendaInput } from "../lib/vendas";
+import { anexarDocumentoVendaPorVisita, type ItemVendaInput } from "../lib/vendas";
 
 function hojeLocal() {
   const agora = new Date();
@@ -124,6 +124,7 @@ export default function VisitasPage() {
   const [form, setForm] = useState(formInicial());
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
+  const [arquivosVenda, setArquivosVenda] = useState<File[]>([]);
 
   useEffect(() => {
     let ativo = true;
@@ -219,6 +220,7 @@ export default function VisitasPage() {
   function cancelarEdicao() {
     setEditandoId(null);
     setForm(formInicial());
+    setArquivosVenda([]);
     setErro("");
   }
 
@@ -340,6 +342,7 @@ export default function VisitasPage() {
       statusCliente: visita.statusCliente || "Ativo",
       observacao: visita.observacao,
     });
+    setArquivosVenda([]);
     setErro("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -432,6 +435,12 @@ export default function VisitasPage() {
       const visitaSalva = editandoId
         ? await atualizarVisitaDetalhada(visitaParaSalvar)
         : await criarVisitaDetalhada(visitaParaSalvar);
+
+      if (visitaSalva.houveVenda && arquivosVenda.length > 0) {
+        for (const arquivo of arquivosVenda) {
+          await anexarDocumentoVendaPorVisita(visitaSalva.id, arquivo);
+        }
+      }
 
       setVisitas((lista) =>
         editandoId
@@ -752,6 +761,30 @@ export default function VisitasPage() {
                         </label>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="permissionsBlock">
+                    <div className="settingsSectionTitle">
+                      <Paperclip size={17} />
+                      <div>
+                        <strong>Documento do pedido</strong>
+                        <span>Anexe PDF, Excel, CSV, foto ou print. O arquivo ficará vinculado à venda automaticamente.</span>
+                      </div>
+                    </div>
+                    <label className="field">
+                      Anexo(s)
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.xls,.xlsx,.csv,image/jpeg,image/png,image/webp"
+                        onChange={(event) => setArquivosVenda(Array.from(event.target.files ?? []))}
+                      />
+                      <small>
+                        {arquivosVenda.length > 0
+                          ? `${arquivosVenda.length} arquivo(s) selecionado(s)`
+                          : "Nenhum arquivo selecionado."}
+                      </small>
+                    </label>
                   </div>
 
                   <div className="permissionsBlock">
