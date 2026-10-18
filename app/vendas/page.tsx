@@ -68,7 +68,7 @@ export default function VendasPage() {
             representadaId: item.representadaId ?? "",
           }))
         : [],
-    }]));
+    }])));
   }
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function VendasPage() {
             valorTotal: item.valorTotal === null ? "" : String(item.valorTotal),
             representadaId: item.representadaId ?? "",
           })),
-        }]));
+        }])));
       })
       .catch((falha: Error) => {
         if (ativo) setErro(falha.message);
