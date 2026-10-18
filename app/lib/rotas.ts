@@ -32,6 +32,7 @@ export type ClienteMapaRota = {
   ordem: number | null;
   representadas: RepresentadaRota[];
   responsavelNome?: string;
+  responsavelChave?: string;
   grupoRotaId?: string;
 };
 
