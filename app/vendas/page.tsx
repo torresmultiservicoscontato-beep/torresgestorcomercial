@@ -7,8 +7,11 @@ import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
   abrirDocumentoVenda,
   anexarDocumentoVenda,
+  buscarClientesVenda,
+  carregarRepresentadasFiltroVendas,
   carregarVendas,
   salvarComplementoVenda,
+  type ClienteBuscaVenda,
   type ItemVendaInput,
   type Venda,
 } from "../lib/vendas";
@@ -39,7 +42,12 @@ export default function VendasPage() {
   const [podeEditar, setPodeEditar] = useState(false);
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
-  const [busca, setBusca] = useState("");
+  const [buscaProduto, setBuscaProduto] = useState("");
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [clienteSelecionadoId, setClienteSelecionadoId] = useState("");
+  const [sugestoesClientes, setSugestoesClientes] = useState<ClienteBuscaVenda[]>([]);
+  const [buscandoClientes, setBuscandoClientes] = useState(false);
+  const [representadasFiltro, setRepresentadasFiltro] = useState<Array<{ id: string; nome: string }>>([]);
   const [filtroRepresentada, setFiltroRepresentada] = useState("");
   const [filtroResponsavel, setFiltroResponsavel] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState("");
@@ -73,10 +81,11 @@ export default function VendasPage() {
 
   useEffect(() => {
     let ativo = true;
-    Promise.all([carregarVendas(), carregarAcessoAtual()])
-      .then(([lista, acesso]) => {
+    Promise.all([carregarVendas(), carregarAcessoAtual(), carregarRepresentadasFiltroVendas()])
+      .then(([lista, acesso, listaRepresentadas]) => {
         if (!ativo) return;
         setVendas(lista);
+        setRepresentadasFiltro(listaRepresentadas);
         setPodeEditar(pode(acesso, "vendas", "editar"));
         setRascunhos(Object.fromEntries(lista.map((venda) => [venda.id, {
           formasPagamento: venda.formasPagamento,
@@ -102,12 +111,6 @@ export default function VendasPage() {
     return () => { ativo = false; };
   }, []);
 
-  const representadas = useMemo(() => {
-    const mapa = new Map<string, string>();
-    vendas.forEach((venda) => venda.representadas.forEach((rep) => mapa.set(rep.id, rep.nome)));
-    return Array.from(mapa.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-  }, [vendas]);
-
   const responsaveis = useMemo(() => {
     const mapa = new Map<string, string>();
     vendas.forEach((venda) => mapa.set(venda.responsavelUserId, venda.responsavelNome));
@@ -115,15 +118,14 @@ export default function VendasPage() {
   }, [vendas]);
 
   const filtradas = useMemo(() => vendas.filter((venda) => {
-    const termo = busca.trim().toLowerCase();
-    const bateBusca = !termo
-      || venda.clienteNome.toLowerCase().includes(termo)
-      || venda.itens.some((item) => item.produto.toLowerCase().includes(termo));
+    const termoProduto = buscaProduto.trim().toLowerCase();
+    const bateCliente = !clienteSelecionadoId || venda.clienteId === clienteSelecionadoId;
+    const bateProduto = !termoProduto || venda.itens.some((item) => item.produto.toLowerCase().includes(termoProduto));
     const bateRepresentada = !filtroRepresentada || venda.representadas.some((rep) => rep.id === filtroRepresentada);
     const bateResponsavel = !filtroResponsavel || venda.responsavelUserId === filtroResponsavel;
     const bateSituacao = !filtroSituacao || venda.situacao === filtroSituacao;
-    return bateBusca && bateRepresentada && bateResponsavel && bateSituacao;
-  }), [vendas, busca, filtroRepresentada, filtroResponsavel, filtroSituacao]);
+    return bateCliente && bateProduto && bateRepresentada && bateResponsavel && bateSituacao;
+  }), [vendas, buscaProduto, clienteSelecionadoId, filtroRepresentada, filtroResponsavel, filtroSituacao]);
 
   const resumoMes = useMemo(() => {
     const agora = new Date();
@@ -197,6 +199,46 @@ export default function VendasPage() {
     }
   }
 
+  useEffect(() => {
+    const termo = buscaCliente.trim();
+    if (clienteSelecionadoId || termo.length < 2) {
+      setSugestoesClientes([]);
+      setBuscandoClientes(false);
+      return;
+    }
+
+    let ativo = true;
+    const timer = window.setTimeout(() => {
+      setBuscandoClientes(true);
+      void buscarClientesVenda(termo)
+        .then((lista) => {
+          if (ativo) setSugestoesClientes(lista);
+        })
+        .catch((falha: Error) => {
+          if (ativo) setErro(falha.message);
+        })
+        .finally(() => {
+          if (ativo) setBuscandoClientes(false);
+        });
+    }, 250);
+
+    return () => {
+      ativo = false;
+      window.clearTimeout(timer);
+    };
+  }, [buscaCliente, clienteSelecionadoId]);
+
+  function selecionarClienteFiltro(cliente: ClienteBuscaVenda) {
+    setClienteSelecionadoId(cliente.id);
+    setBuscaCliente(cliente.nome);
+    setSugestoesClientes([]);
+  }
+
+  function alterarBuscaCliente(valor: string) {
+    setBuscaCliente(valor);
+    if (clienteSelecionadoId) setClienteSelecionadoId("");
+  }
+
   async function anexar(venda: Venda, event: ChangeEvent<HTMLInputElement>) {
     const arquivo = event.target.files?.[0];
     event.target.value = "";
@@ -236,24 +278,54 @@ export default function VendasPage() {
       </section>
 
       <section className={styles.filters}>
-        <label className="field">
-          Buscar
-          <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Cliente ou produto" />
+        <label className={`field ${styles.clientSearchField}`}>
+          Cliente
+          <input
+            value={buscaCliente}
+            onChange={(event) => alterarBuscaCliente(event.target.value)}
+            placeholder="Digite pelo menos 2 letras"
+            autoComplete="off"
+          />
+          {buscandoClientes && <small>Buscando clientes...</small>}
+          {sugestoesClientes.length > 0 && (
+            <div className={styles.clientSuggestions}>
+              {sugestoesClientes.map((cliente) => (
+                <button type="button" key={cliente.id} onClick={() => selecionarClienteFiltro(cliente)}>
+                  <strong>{cliente.nome}</strong>
+                  <span>{[cliente.bairro, cliente.cidade].filter(Boolean).join(" • ")}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {clienteSelecionadoId && (
+            <button className={styles.clearClient} type="button" onClick={() => { setClienteSelecionadoId(""); setBuscaCliente(""); }}>
+              Limpar cliente
+            </button>
+          )}
         </label>
+
+        <label className="field">
+          Produto
+          <input value={buscaProduto} onChange={(event) => setBuscaProduto(event.target.value)} placeholder="Buscar nos itens vendidos" />
+        </label>
+
         <label className="field">
           Representada
           <select value={filtroRepresentada} onChange={(event) => setFiltroRepresentada(event.target.value)}>
             <option value="">Todas</option>
-            {representadas.map((rep) => <option key={rep.id} value={rep.id}>{rep.nome}</option>)}
+            {representadasFiltro.map((rep) => <option key={rep.id} value={rep.id}>{rep.nome}</option>)}
           </select>
         </label>
+
         <label className="field">
-          Responsável
+          Vendedor / responsável
           <select value={filtroResponsavel} onChange={(event) => setFiltroResponsavel(event.target.value)}>
             <option value="">Todos</option>
             {responsaveis.map((responsavel) => <option key={responsavel.id} value={responsavel.id}>{responsavel.nome}</option>)}
           </select>
+          <small>Representante titular ou preposto que realizou a venda.</small>
         </label>
+
         <label className="field">
           Situação
           <select value={filtroSituacao} onChange={(event) => setFiltroSituacao(event.target.value)}>
