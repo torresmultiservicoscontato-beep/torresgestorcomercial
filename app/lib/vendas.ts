@@ -378,19 +378,25 @@ export async function anexarDocumentoVendaPorVisita(visitaId: string, arquivo: F
 
   if (uploadError) throw new Error(`Falha ao enviar documento: ${uploadError.message}`);
 
-  const { error: registroError } = await cliente.from("venda_anexos").insert({
-    venda_id: venda.id,
-    nome_arquivo: arquivo.name,
-    caminho_storage: caminho,
-    tipo_mime: arquivo.type || "",
-    tamanho_bytes: arquivo.size,
-    status_extracao: "pendente",
-  });
+  const { data: registro, error: registroError } = await cliente
+    .from("venda_anexos")
+    .insert({
+      venda_id: venda.id,
+      nome_arquivo: arquivo.name,
+      caminho_storage: caminho,
+      tipo_mime: arquivo.type || "",
+      tamanho_bytes: arquivo.size,
+      status_extracao: "pendente",
+    })
+    .select("id")
+    .single();
 
-  if (registroError) {
+  if (registroError || !registro) {
     await cliente.storage.from("vendas-documentos").remove([caminho]);
-    throw new Error(`Falha ao registrar documento: ${registroError.message}`);
+    throw new Error(`Falha ao registrar documento: ${registroError?.message ?? "registro não criado"}`);
   }
+
+  return registro.id as string;
 }
 
 export async function anexarDocumentoVenda(venda: Venda, arquivo: File) {
