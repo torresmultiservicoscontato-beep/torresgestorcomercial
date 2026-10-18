@@ -350,6 +350,49 @@ function nomeSeguro(nome: string) {
     .slice(-120);
 }
 
+export async function anexarDocumentoVendaPorVisita(visitaId: string, arquivo: File) {
+  const cliente = exigirSupabase();
+  const {
+    data: { user },
+    error: authError,
+  } = await cliente.auth.getUser();
+
+  if (authError || !user) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
+
+  const { data: venda, error: vendaError } = await cliente
+    .from("vendas")
+    .select("id,titular_user_id")
+    .eq("visita_id", visitaId)
+    .eq("ativa", true)
+    .maybeSingle();
+
+  if (vendaError) throw new Error(`Falha ao localizar a venda da visita: ${vendaError.message}`);
+  if (!venda) throw new Error("A venda vinculada à visita ainda não foi criada.");
+
+  if (arquivo.size > 15 * 1024 * 1024) throw new Error("O arquivo deve ter no máximo 15 MB.");
+
+  const caminho = `${venda.titular_user_id}/${venda.id}/${crypto.randomUUID()}-${nomeSeguro(arquivo.name)}`;
+  const { error: uploadError } = await cliente.storage
+    .from("vendas-documentos")
+    .upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false });
+
+  if (uploadError) throw new Error(`Falha ao enviar documento: ${uploadError.message}`);
+
+  const { error: registroError } = await cliente.from("venda_anexos").insert({
+    venda_id: venda.id,
+    nome_arquivo: arquivo.name,
+    caminho_storage: caminho,
+    tipo_mime: arquivo.type || "",
+    tamanho_bytes: arquivo.size,
+    status_extracao: "pendente",
+  });
+
+  if (registroError) {
+    await cliente.storage.from("vendas-documentos").remove([caminho]);
+    throw new Error(`Falha ao registrar documento: ${registroError.message}`);
+  }
+}
+
 export async function anexarDocumentoVenda(venda: Venda, arquivo: File) {
   const { cliente } = await resolverContexto("editar");
   if (arquivo.size > 15 * 1024 * 1024) throw new Error("O arquivo deve ter no máximo 15 MB.");
