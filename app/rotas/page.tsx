@@ -259,6 +259,7 @@ export default function RotasPage() {
           return clientes.map((cliente) => ({
             ...cliente,
             responsavelNome: item.nomeResponsavel,
+            responsavelChave: item.chave,
             grupoRotaId: item.rota.id,
           }));
         }),
