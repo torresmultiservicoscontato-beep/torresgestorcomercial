@@ -41,7 +41,7 @@ const operacionais = [
   { label: "Clientes", href: "/clientes", icon: Users, modulo: "clientes", enabled: true },
   { label: "Rotas", href: "/rotas", icon: MapPinned, modulo: "rotas", enabled: true },
   { label: "Visitas", href: "/visitas", icon: ClipboardCheck, modulo: "visitas", enabled: true },
-  { label: "Vendas", href: "#", icon: ShoppingCart, modulo: "vendas", enabled: false },
+  { label: "Vendas", href: "/vendas", icon: ShoppingCart, modulo: "vendas", enabled: true },
   { label: "Agenda", href: "#", icon: CalendarDays, modulo: "agenda", enabled: false },
   { label: "Relatórios", href: "#", icon: BarChart3, modulo: "relatorios", enabled: false },
 ];
