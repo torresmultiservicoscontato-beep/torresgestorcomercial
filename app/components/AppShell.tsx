@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Boxes,
   CalendarDays,
   ClipboardCheck,
   Home,
@@ -41,6 +42,7 @@ const operacionais = [
   { label: "Início", href: "/", icon: Home, modulo: "inicio", enabled: true },
   { label: "Clientes", href: "/clientes", icon: Users, modulo: "clientes", enabled: true },
   { label: "Representadas", href: "/representadas", icon: Landmark, modulo: "representadas", enabled: true },
+  { label: "Produtos", href: "/produtos", icon: Boxes, modulo: "produtos", enabled: true },
   { label: "Rotas", href: "/rotas", icon: MapPinned, modulo: "rotas", enabled: true },
   { label: "Visitas", href: "/visitas", icon: ClipboardCheck, modulo: "visitas", enabled: true },
   { label: "Vendas", href: "/vendas", icon: ShoppingCart, modulo: "vendas", enabled: true },
@@ -174,7 +176,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   const menuOperacional = operacionais.filter((item) => {
-    if (item.modulo === "inicio" || item.modulo === "representadas") return true;
+    if (item.modulo === "inicio" || item.modulo === "representadas" || item.modulo === "produtos") return true;
     return pode(acesso, item.modulo, "visualizar");
   });
 
