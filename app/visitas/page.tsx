@@ -912,48 +912,50 @@ export default function VisitasPage() {
                       <Building2 size={17} />
                       <div>
                         <strong>Produtos e mercadorias</strong>
-                        <span>Marque produtos já usados ou cadastre um novo. A lista acompanha a venda automaticamente.</span>
+                        <span>Selecione produtos ativos do catálogo oficial. Assim venda, faturamento e comissão usam o mesmo cadastro.</span>
                       </div>
                     </div>
 
                     <div className="two">
                       <label className="field">
-                        Novo produto / mercadoria
-                        <input value={form.novoProduto} onChange={(event) => setForm({ ...form, novoProduto: event.target.value })} placeholder="Ex.: Argamassa ACIII 20 kg" />
+                        Buscar produto
+                        <input
+                          value={buscaProduto}
+                          onChange={(event) => setBuscaProduto(event.target.value)}
+                          placeholder="Nome, código ou representada"
+                        />
                       </label>
-                      <button className="secondary" type="button" style={{ alignSelf: "end", marginBottom: 0 }} onClick={adicionarProdutoVenda}>
-                        <Plus size={15} /> Adicionar produto
-                      </button>
+
+                      {podeCadastrarProduto && (
+                        <button
+                          className="secondary"
+                          type="button"
+                          style={{ alignSelf: "end", marginBottom: 0 }}
+                          onClick={mostrarCadastroProduto ? () => setMostrarCadastroProduto(false) : abrirCadastroProdutoRapido}
+                        >
+                          {mostrarCadastroProduto ? <X size={15} /> : <Plus size={15} />}
+                          {mostrarCadastroProduto ? "Fechar cadastro" : "Cadastrar novo produto"}
+                        </button>
+                      )}
                     </div>
 
-                    {catalogoProdutos.length > 0 && (
-                      <div className="representadasChecklist">
-                        {catalogoProdutos.map((produto) => {
-                          const item = form.itensVenda.find((atual) => atual.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR"));
-                          const marcada = Boolean(item);
-                          return (
-                            <label className="representadaOption" key={produto} style={marcada ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}>
-                              <input type="checkbox" checked={marcada} onChange={(event) => alternarProdutoVenda(produto, event.target.checked)} />
-                              <span><strong>{produto}</strong></span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {podeCadastrarProduto && mostrarCadastroProduto && (
+                      <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--line)", borderRadius: 10, background: "#fbfcfe" }}>
+                        <div className="settingsSectionTitle">
+                          <Plus size={16} />
+                          <div>
+                            <strong>Cadastro rápido de produto</strong>
+                            <span>O produto será salvo no mesmo catálogo do menu Produtos e já ficará selecionado nesta venda.</span>
+                          </div>
+                        </div>
 
-                    {form.itensVenda.map((item) => (
-                      <div className="formGrid" key={item.produto} style={{ marginTop: 10, padding: 10, border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}>
-                        <label className="field span2">
-                          Produto
-                          <input readOnly value={item.produto} />
-                        </label>
-                        {form.representadaIds.length > 1 && (
+                        <div className="formGrid">
                           <label className="field span2">
-                            Representada deste produto *
+                            Representada *
                             <select
                               required
-                              value={item.representadaId ?? ""}
-                              onChange={(event) => atualizarProdutoVenda(item.produto, "representadaId", event.target.value)}
+                              value={novoProdutoRapido.representadaId}
+                              onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, representadaId: event.target.value })}
                             >
                               <option value="">Selecionar representada</option>
                               {representadasOperacionais
@@ -962,27 +964,172 @@ export default function VisitasPage() {
                                   <option key={representada.id} value={representada.id}>{representada.nome}</option>
                                 ))}
                             </select>
-                            <small>Essa definição separa faturamento e comissão quando a visita gera pedidos para mais de uma representada.</small>
                           </label>
-                        )}
-                        <label className="field">
-                          Quantidade
-                          <input value={item.quantidade ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "quantidade", event.target.value)} inputMode="decimal" />
-                        </label>
-                        <label className="field">
-                          Unidade
-                          <input value={item.unidade ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "unidade", event.target.value)} placeholder="UN, CX, KG..." />
-                        </label>
-                        <label className="field">
-                          Valor unitário
-                          <input value={item.valorUnitario ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "valorUnitario", event.target.value)} inputMode="decimal" />
-                        </label>
-                        <label className="field">
-                          Valor total
-                          <input value={item.valorTotal ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "valorTotal", event.target.value)} inputMode="decimal" />
-                        </label>
+
+                          <label className="field">
+                            Código / SKU
+                            <input
+                              value={novoProdutoRapido.codigo}
+                              onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, codigo: event.target.value })}
+                            />
+                          </label>
+
+                          <label className="field span2">
+                            Produto *
+                            <input
+                              value={novoProdutoRapido.nome}
+                              onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, nome: event.target.value })}
+                              placeholder="Ex.: Argamassa ACIII 20 kg"
+                            />
+                          </label>
+
+                          <label className="field">
+                            Unidade
+                            <input
+                              value={novoProdutoRapido.unidade}
+                              onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, unidade: event.target.value })}
+                              placeholder="UN, CX, KG..."
+                            />
+                          </label>
+
+                          <label className="field">
+                            Comissão específica do representante (%)
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={novoProdutoRapido.comissaoPercentual}
+                              onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, comissaoPercentual: event.target.value })}
+                              placeholder="Vazio = padrão da representada"
+                            />
+                          </label>
+                        </div>
+
+                        <button className="primary" type="button" disabled={salvandoProdutoRapido} onClick={() => void cadastrarProdutoRapido()}>
+                          <Plus size={15} />
+                          {salvandoProdutoRapido ? "Cadastrando..." : "Cadastrar e selecionar"}
+                        </button>
                       </div>
-                    ))}
+                    )}
+
+                    {form.representadaIds.length === 0 ? (
+                      <div className="emptyState" style={{ marginTop: 12 }}>
+                        Selecione uma representada na visita para carregar os produtos disponíveis.
+                      </div>
+                    ) : catalogoProdutos.length > 0 ? (
+                      <div className="representadasChecklist" style={{ marginTop: 12 }}>
+                        {catalogoProdutos.map((produto) => {
+                          const item = form.itensVenda.find((atual) => itemCorrespondeProduto(atual, produto));
+                          const marcada = Boolean(item);
+
+                          return (
+                            <label
+                              className="representadaOption"
+                              key={produto.id}
+                              style={marcada ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={marcada}
+                                onChange={(event) => alternarProdutoVenda(produto, event.target.checked)}
+                              />
+                              <span>
+                                <strong>{produto.nome}</strong>
+                                <small>
+                                  {produto.representadaNome}
+                                  {produto.codigo ? ` • Cód. ${produto.codigo}` : ""}
+                                  {produto.unidade ? ` • ${produto.unidade}` : ""}
+                                </small>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="emptyState" style={{ marginTop: 12 }}>
+                        Nenhum produto ativo encontrado para as representadas selecionadas.
+                        {podeCadastrarProduto ? " Você pode cadastrar um produto novo acima." : " Solicite o cadastro ao representante."}
+                      </div>
+                    )}
+
+                    {form.itensVenda.map((item) => {
+                      const chave = chaveItemVenda(item);
+                      const representadaItem = representadasOperacionais.find((representada) => representada.id === item.representadaId);
+
+                      return (
+                        <div
+                          className="formGrid"
+                          key={chave}
+                          style={{ marginTop: 10, padding: 10, border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}
+                        >
+                          <label className="field span2">
+                            Produto
+                            <input readOnly value={item.produto} />
+                            <small>
+                              {representadaItem?.nome || "Representada não identificada"}
+                              {item.codigo ? ` • Cód. ${item.codigo}` : ""}
+                            </small>
+                          </label>
+
+                          {form.representadaIds.length > 1 && !item.produtoId && (
+                            <label className="field span2">
+                              Representada deste produto *
+                              <select
+                                required
+                                value={item.representadaId ?? ""}
+                                onChange={(event) => atualizarProdutoVenda(chave, "representadaId", event.target.value)}
+                              >
+                                <option value="">Selecionar representada</option>
+                                {representadasOperacionais
+                                  .filter((representada) => form.representadaIds.includes(representada.id))
+                                  .map((representada) => (
+                                    <option key={representada.id} value={representada.id}>{representada.nome}</option>
+                                  ))}
+                              </select>
+                              <small>Produto antigo sem vínculo de catálogo. Selecione a representada para manter o pedido consistente.</small>
+                            </label>
+                          )}
+
+                          <label className="field">
+                            Quantidade
+                            <input
+                              value={item.quantidade ?? ""}
+                              onChange={(event) => atualizarProdutoVenda(chave, "quantidade", event.target.value)}
+                              inputMode="decimal"
+                            />
+                          </label>
+
+                          <label className="field">
+                            Unidade
+                            <input
+                              readOnly={Boolean(item.produtoId)}
+                              value={item.unidade ?? ""}
+                              onChange={(event) => atualizarProdutoVenda(chave, "unidade", event.target.value)}
+                              placeholder="UN, CX, KG..."
+                            />
+                          </label>
+
+                          <label className="field">
+                            Valor unitário
+                            <input
+                              value={item.valorUnitario ?? ""}
+                              onChange={(event) => atualizarProdutoVenda(chave, "valorUnitario", event.target.value)}
+                              inputMode="decimal"
+                            />
+                          </label>
+
+                          <label className="field">
+                            Valor total
+                            <input
+                              value={item.valorTotal ?? ""}
+                              onChange={(event) => atualizarProdutoVenda(chave, "valorTotal", event.target.value)}
+                              inputMode="decimal"
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
