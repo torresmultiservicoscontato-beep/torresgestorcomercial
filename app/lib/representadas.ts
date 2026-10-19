@@ -212,3 +212,31 @@ export async function salvarRepassePreposto(input: {
 
   if (error) throw new Error(`Falha ao salvar repasse do preposto: ${error.message}`);
 }
+
+
+export type ResumoProdutosRepresentada = {
+  total: number;
+  comissaoEspecifica: number;
+};
+
+export async function carregarResumoProdutosRepresentadas(): Promise<Record<string, ResumoProdutosRepresentada>> {
+  const { cliente, titularUserId, acesso } = await contexto();
+  if (acesso.papel === "preposto") return {};
+
+  const { data, error } = await cliente
+    .from("representada_produtos")
+    .select("representada_id,comissao_percentual")
+    .eq("titular_user_id", titularUserId);
+
+  if (error) throw new Error(`Falha ao resumir produtos das representadas: ${error.message}`);
+
+  const resumo: Record<string, ResumoProdutosRepresentada> = {};
+  for (const item of data ?? []) {
+    const atual = resumo[item.representada_id] ?? { total: 0, comissaoEspecifica: 0 };
+    atual.total += 1;
+    if (item.comissao_percentual !== null) atual.comissaoEspecifica += 1;
+    resumo[item.representada_id] = atual;
+  }
+
+  return resumo;
+}
