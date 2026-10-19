@@ -100,6 +100,8 @@ export default function ComissoesPage() {
         liberado: pedidos.reduce((s, p) => s + p.comissaoPrepostoLiberada, 0),
         pago: pedidos.reduce((s, p) => s + p.comissaoPrepostoPaga, 0),
         pendente: pedidos.reduce((s, p) => s + Math.max(p.comissaoPrepostoLiberada - p.comissaoPrepostoPaga, 0), 0),
+        prepostoPendente: 0,
+        prepostoPago: 0,
       };
     }
 
@@ -108,6 +110,8 @@ export default function ComissoesPage() {
       liberado: pedidos.reduce((s, p) => s + (p.comissaoRepresentanteLiberada ?? 0), 0),
       pago: pedidos.reduce((s, p) => s + (p.comissaoRepresentanteRecebida ?? 0), 0),
       pendente: pedidos.reduce((s, p) => s + Math.max((p.comissaoRepresentanteLiberada ?? 0) - (p.comissaoRepresentanteRecebida ?? 0), 0), 0),
+      prepostoPendente: pedidos.reduce((s, p) => s + Math.max(p.comissaoPrepostoLiberada - p.comissaoPrepostoPaga, 0), 0),
+      prepostoPago: pedidos.reduce((s, p) => s + p.comissaoPrepostoPaga, 0),
     };
   }, [pedidos, modo]);
 
@@ -256,8 +260,14 @@ export default function ComissoesPage() {
       <section className={styles.stats}>
         <article><ReceiptText size={18} /><span>Comissão prevista</span><strong>{moeda(resumo.previsto)}</strong></article>
         <article><CircleDollarSign size={18} /><span>Comissão liberada</span><strong>{moeda(resumo.liberado)}</strong></article>
-        <article><WalletCards size={18} /><span>{modo === "preposto" ? "Já recebida" : "Já recebida"}</span><strong>{moeda(resumo.pago)}</strong></article>
-        <article><BadgeDollarSign size={18} /><span>{modo === "preposto" ? "A receber" : "A receber"}</span><strong>{moeda(resumo.pendente)}</strong></article>
+        <article><BadgeDollarSign size={18} /><span>A receber</span><strong>{moeda(resumo.pendente)}</strong></article>
+        <article><WalletCards size={18} /><span>Já recebida</span><strong>{moeda(resumo.pago)}</strong></article>
+        {modo === "gestao" && (
+          <>
+            <article><Banknote size={18} /><span>A pagar aos prepostos</span><strong>{moeda(resumo.prepostoPendente)}</strong></article>
+            <article><CheckCircle2 size={18} /><span>Pago aos prepostos</span><strong>{moeda(resumo.prepostoPago)}</strong></article>
+          </>
+        )}
       </section>
 
       <section className={styles.filters}>
