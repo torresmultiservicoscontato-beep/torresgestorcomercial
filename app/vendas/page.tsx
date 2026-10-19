@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, FileText, ShoppingCart } from "lucide-react";
+import { BadgeDollarSign, ChevronDown, ChevronUp, FileText, ShoppingCart } from "lucide-react";
 import AppShell from "../components/AppShell";
 import {
   abrirDocumentoVenda,
@@ -140,8 +141,12 @@ export default function VendasPage() {
         <div>
           <p className="eyebrow">CONSULTA COMERCIAL</p>
           <h1>Vendas</h1>
-          <p>Consulte as vendas registradas nas visitas. O lançamento e a edição da venda acontecem somente em Visitas.</p>
+          <p>Consulte as vendas registradas nas visitas. O lançamento e a edição comercial acontecem em Visitas; faturamento, baixas e comissões ficam no módulo Comissões.</p>
         </div>
+        <Link className="secondary" href="/comissoes">
+          <BadgeDollarSign size={16} />
+          Gerenciar faturamento e comissões
+        </Link>
       </header>
 
       {erro && <div className="loginAlert error settingsAlert">{erro}</div>}
