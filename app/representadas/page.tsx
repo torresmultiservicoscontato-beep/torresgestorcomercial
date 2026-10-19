@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { Building2, Pencil, Plus, Save, Users, X } from "lucide-react";
+import { ArrowRight, Boxes, Building2, Pencil, Plus, Save, Users, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import {
   carregarPrepostosRepresentada,
   carregarRepresentadasModulo,
+  carregarResumoProdutosRepresentadas,
   salvarRepresentada,
   salvarRepassePreposto,
   type PrepostoRepresentada,
   type RepresentadaModulo,
+  type ResumoProdutosRepresentada,
 } from "../lib/representadas";
 import styles from "./representadas.module.css";
 
@@ -40,21 +43,30 @@ export default function RepresentadasPage() {
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [prepostos, setPrepostos] = useState<PrepostoRepresentada[]>([]);
   const [repasseDraft, setRepasseDraft] = useState<Record<string, { comissao: string; dia: string }>>({});
+  const [resumoProdutos, setResumoProdutos] = useState<Record<string, ResumoProdutosRepresentada>>({});
 
   async function recarregar() {
-    const dados = await carregarRepresentadasModulo();
+    const [dados, resumo] = await Promise.all([
+      carregarRepresentadasModulo(),
+      carregarResumoProdutosRepresentadas(),
+    ]);
     setModo(dados.modo);
     setRepresentadas(dados.representadas);
+    setResumoProdutos(resumo);
   }
 
   useEffect(() => {
     let ativo = true;
 
-    void carregarRepresentadasModulo()
-      .then((dados) => {
+    void Promise.all([
+      carregarRepresentadasModulo(),
+      carregarResumoProdutosRepresentadas(),
+    ])
+      .then(([dados, resumo]) => {
         if (!ativo) return;
         setModo(dados.modo);
         setRepresentadas(dados.representadas);
+        setResumoProdutos(resumo);
       })
       .catch((falha: Error) => {
         if (ativo) setErro(falha.message);
@@ -274,16 +286,23 @@ export default function RepresentadasPage() {
                 {modo === "gestao" && <span>{item.cnpj || "CNPJ não informado"}</span>}
               </div>
 
-              {modo === "gestao" && (
-                <div className={styles.actions}>
-                  <button className="secondary" type="button" onClick={() => editar(item)}>
-                    <Pencil size={14} /> Editar
-                  </button>
-                  <button className="secondary" type="button" onClick={() => void abrirPrepostos(item)}>
-                    {abertaId === item.id ? "Fechar prepostos" : "Repasse para prepostos"}
-                  </button>
-                </div>
-              )}
+              <div className={styles.actions}>
+                {modo === "gestao" && (
+                  <>
+                    <button className="secondary" type="button" onClick={() => editar(item)}>
+                      <Pencil size={14} /> Editar
+                    </button>
+                    <button className="secondary" type="button" onClick={() => void abrirPrepostos(item)}>
+                      {abertaId === item.id ? "Fechar prepostos" : "Repasse para prepostos"}
+                    </button>
+                  </>
+                )}
+                <Link className={styles.productsLink} href={`/produtos?representada=${item.id}`}>
+                  <Boxes size={14} />
+                  Ver produtos
+                  <ArrowRight size={13} />
+                </Link>
+              </div>
             </div>
 
             {modo === "preposto" ? (
@@ -302,11 +321,26 @@ export default function RepresentadasPage() {
                 </div>
               </div>
             ) : (
-              <div className={styles.summary}>
-                <span>Comissão geral: <strong>{(item.comissaoPercentual ?? 0).toLocaleString("pt-BR")}%</strong></span>
-                <span>Base: <strong>{item.baseComissao === "liquidado" ? "Liquidado" : "Faturado"}</strong></span>
-                <span>Recebimento: <strong>{item.diaRecebimentoComissao ? `dia ${item.diaRecebimentoComissao}` : "não informado"}</strong></span>
-              </div>
+              <>
+                <div className={styles.summary}>
+                  <span>Comissão geral: <strong>{(item.comissaoPercentual ?? 0).toLocaleString("pt-BR")}%</strong></span>
+                  <span>Base: <strong>{item.baseComissao === "liquidado" ? "Liquidado" : "Faturado"}</strong></span>
+                  <span>Recebimento: <strong>{item.diaRecebimentoComissao ? `dia ${item.diaRecebimentoComissao}` : "não informado"}</strong></span>
+                </div>
+                <div className={styles.productSummary}>
+                  <div>
+                    <span>Produtos cadastrados</span>
+                    <strong>{resumoProdutos[item.id]?.total ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Com comissão específica</span>
+                    <strong>{resumoProdutos[item.id]?.comissaoEspecifica ?? 0}</strong>
+                  </div>
+                  <Link href={`/produtos?representada=${item.id}`}>
+                    Abrir catálogo desta representada <ArrowRight size={13} />
+                  </Link>
+                </div>
+              </>
             )}
 
             {modo === "gestao" && abertaId === item.id && (
