@@ -49,6 +49,7 @@ export default function ProdutosPage() {
   const [mensagem, setMensagem] = useState("");
   const [busca, setBusca] = useState("");
   const [filtroRepresentada, setFiltroRepresentada] = useState("");
+  const [filtroComissao, setFiltroComissao] = useState<"todos" | "especifica" | "padrao">("todos");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(formVazio());
   const [salvando, setSalvando] = useState(false);
@@ -63,9 +64,15 @@ export default function ProdutosPage() {
   useEffect(() => {
     let ativo = true;
 
+    const representadaInicial = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("representada") ?? ""
+      : "";
+
+    if (representadaInicial) setFiltroRepresentada(representadaInicial);
+
     void Promise.all([
       carregarRepresentadasProdutos(),
-      carregarProdutosModulo(),
+      carregarProdutosModulo(representadaInicial || undefined),
     ])
       .then(([dadosRepresentadas, listaProdutos]) => {
         if (!ativo) return;
@@ -90,9 +97,16 @@ export default function ProdutosPage() {
         || produto.nome.toLocaleLowerCase("pt-BR").includes(termo)
         || produto.codigo.toLocaleLowerCase("pt-BR").includes(termo);
       const bateRepresentada = !filtroRepresentada || produto.representadaId === filtroRepresentada;
-      return bateBusca && bateRepresentada;
+      const bateComissao = modo === "preposto"
+        ? true
+        : filtroComissao === "todos"
+          ? true
+          : filtroComissao === "especifica"
+            ? produto.comissaoRepresentantePercentual !== null
+            : produto.comissaoRepresentantePercentual === null;
+      return bateBusca && bateRepresentada && bateComissao;
     });
-  }, [produtos, busca, filtroRepresentada]);
+  }, [produtos, busca, filtroRepresentada, filtroComissao, modo]);
 
   async function alterarRepresentadaFiltro(id: string) {
     setFiltroRepresentada(id);
@@ -219,6 +233,8 @@ export default function ProdutosPage() {
   }
 
   const representadaDoForm = representadas.find((item) => item.id === form.representadaId);
+  const totalEspecifica = modo === "gestao" ? produtos.filter((produto) => produto.comissaoRepresentantePercentual !== null).length : 0;
+  const totalPadrao = modo === "gestao" ? produtos.filter((produto) => produto.comissaoRepresentantePercentual === null).length : 0;
 
   return (
     <AppShell>
@@ -342,6 +358,14 @@ export default function ProdutosPage() {
         </form>
       )}
 
+      {modo === "gestao" && (
+        <section className={styles.catalogSummary}>
+          <div><span>Produtos carregados</span><strong>{produtos.length}</strong></div>
+          <div><span>Usando comissão padrão</span><strong>{totalPadrao}</strong></div>
+          <div><span>Com comissão específica</span><strong>{totalEspecifica}</strong></div>
+        </section>
+      )}
+
       <section className={styles.filters}>
         <label className="field">
           <span><Search size={13} /> Buscar produto</span>
@@ -357,6 +381,17 @@ export default function ProdutosPage() {
             ))}
           </select>
         </label>
+
+        {modo === "gestao" && (
+          <label className="field">
+            Regra de comissão
+            <select value={filtroComissao} onChange={(event) => setFiltroComissao(event.target.value as "todos" | "especifica" | "padrao")}>
+              <option value="todos">Todos os produtos</option>
+              <option value="especifica">Somente comissão específica</option>
+              <option value="padrao">Somente comissão padrão</option>
+            </select>
+          </label>
+        )}
       </section>
 
       <section className={styles.list}>
@@ -391,14 +426,24 @@ export default function ProdutosPage() {
 
             {modo === "gestao" ? (
               <div className={styles.commissionSummary}>
-                <span>
-                  Comissão do representante:
-                  <strong>
-                    {produto.comissaoRepresentantePercentual === null
-                      ? "Padrão da representada"
-                      : `${produto.comissaoRepresentantePercentual.toLocaleString("pt-BR")}%`}
-                  </strong>
-                </span>
+                {(() => {
+                  const representada = representadas.find((item) => item.id === produto.representadaId);
+                  const padrao = representada?.comissaoGeral ?? 0;
+                  return produto.comissaoRepresentantePercentual === null ? (
+                    <span className={styles.ruleBadge}>
+                      Comissão: <strong>Padrão {padrao.toLocaleString("pt-BR")}%</strong>
+                      <small>Usando regra geral da representada</small>
+                    </span>
+                  ) : (
+                    <>
+                      <span className={styles.ruleBadge}>
+                        Comissão específica: <strong>{produto.comissaoRepresentantePercentual.toLocaleString("pt-BR")}%</strong>
+                        <small>Exceção deste produto</small>
+                      </span>
+                      <span>Padrão da representada: <strong>{padrao.toLocaleString("pt-BR")}%</strong></span>
+                    </>
+                  );
+                })()}
                 <span>Status: <strong>{produto.ativo ? "Ativo" : "Inativo"}</strong></span>
               </div>
             ) : (
