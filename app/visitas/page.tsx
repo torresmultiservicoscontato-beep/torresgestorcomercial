@@ -17,6 +17,7 @@ import {
   type TipoContato,
   type VisitaDetalhada,
 } from "../lib/visitasDetalhadas";
+import { carregarProdutosModulo, salvarProduto, type ProdutoModulo } from "../lib/produtos";
 import { anexarDocumentoVendaPorVisita, type ItemVendaInput } from "../lib/vendas";
 
 function hojeLocal() {
@@ -45,7 +46,6 @@ function formInicial() {
     condicoesPrazo: [] as string[],
     situacaoVenda: "Pedido lançado",
     itensVenda: [] as ItemVendaInput[],
-    novoProduto: "",
     resultado: "Sem venda",
     proximaAcao: "Retorno",
     proximaData: "",
@@ -125,6 +125,18 @@ export default function VisitasPage() {
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
   const [arquivosVenda, setArquivosVenda] = useState<File[]>([]);
+  const [produtosCatalogo, setProdutosCatalogo] = useState<ProdutoModulo[]>([]);
+  const [buscaProduto, setBuscaProduto] = useState("");
+  const [podeCadastrarProduto, setPodeCadastrarProduto] = useState(false);
+  const [mostrarCadastroProduto, setMostrarCadastroProduto] = useState(false);
+  const [salvandoProdutoRapido, setSalvandoProdutoRapido] = useState(false);
+  const [novoProdutoRapido, setNovoProdutoRapido] = useState({
+    representadaId: "",
+    codigo: "",
+    nome: "",
+    unidade: "",
+    comissaoPercentual: "",
+  });
 
   useEffect(() => {
     let ativo = true;
@@ -134,14 +146,17 @@ export default function VisitasPage() {
       carregarVisitasDetalhadas(),
       carregarRepresentadasOperacionais(),
       carregarAcessoAtual(),
+      carregarProdutosModulo(),
     ])
-      .then(([listaClientes, listaVisitas, listaRepresentadas, acesso]) => {
+      .then(([listaClientes, listaVisitas, listaRepresentadas, acesso, listaProdutos]) => {
         if (!ativo) return;
         setClientes(listaClientes);
         setVisitas(listaVisitas);
         setRepresentadasOperacionais(listaRepresentadas);
+        setProdutosCatalogo(listaProdutos.filter((produto) => produto.ativo));
         setPodeCadastrar(pode(acesso, "visitas", "cadastrar"));
         setPodeEditar(pode(acesso, "visitas", "editar"));
+        setPodeCadastrarProduto(acesso?.papel !== "preposto");
       })
       .catch((falha: Error) => {
         if (!ativo) return;
@@ -178,17 +193,24 @@ export default function VisitasPage() {
   );
 
   const catalogoProdutos = useMemo(() => {
-    const mapa = new Map<string, string>();
-    visitas.forEach((visita) => visita.itensVenda.forEach((item) => {
-      const nome = item.produto.trim();
-      if (nome) mapa.set(nome.toLocaleLowerCase("pt-BR"), nome);
-    }));
-    form.itensVenda.forEach((item) => {
-      const nome = item.produto.trim();
-      if (nome) mapa.set(nome.toLocaleLowerCase("pt-BR"), nome);
-    });
-    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [visitas, form.itensVenda]);
+    const termo = buscaProduto.trim().toLocaleLowerCase("pt-BR");
+
+    return produtosCatalogo
+      .filter((produto) =>
+        produto.ativo
+        && form.representadaIds.includes(produto.representadaId)
+        && (
+          !termo
+          || produto.nome.toLocaleLowerCase("pt-BR").includes(termo)
+          || produto.codigo.toLocaleLowerCase("pt-BR").includes(termo)
+          || produto.representadaNome.toLocaleLowerCase("pt-BR").includes(termo)
+        )
+      )
+      .sort((a, b) =>
+        a.representadaNome.localeCompare(b.representadaNome, "pt-BR")
+        || a.nome.localeCompare(b.nome, "pt-BR")
+      );
+  }, [produtosCatalogo, form.representadaIds, buscaProduto]);
 
   function encontrarVisitaAnterior(data: string, horaEntrada: string) {
     return [...visitas]
@@ -221,6 +243,8 @@ export default function VisitasPage() {
     setEditandoId(null);
     setForm(formInicial());
     setArquivosVenda([]);
+    setBuscaProduto("");
+    setMostrarCadastroProduto(false);
     setErro("");
   }
 
@@ -230,19 +254,34 @@ export default function VisitasPage() {
       representadaIds: marcada
         ? Array.from(new Set([...atual.representadaIds, id]))
         : atual.representadaIds.filter((item) => item !== id),
+      itensVenda: marcada
+        ? atual.itensVenda
+        : atual.itensVenda.filter((item) => item.representadaId !== id),
     }));
+
+    if (!marcada && novoProdutoRapido.representadaId === id) {
+      setNovoProdutoRapido((atual) => ({ ...atual, representadaId: "" }));
+    }
   }
 
   function selecionarCliente(clienteId: string) {
     const cliente = clientes.find((item) => item.id === clienteId);
     const anterior = encontrarVisitaAnterior(form.data, form.horaEntrada);
+    const novasRepresentadas = cliente?.representadas.map((item) => item.id) ?? [];
+
     setForm((atual) => ({
       ...atual,
       clienteId,
-      representadaIds: cliente?.representadas.map((item) => item.id) ?? [],
+      representadaIds: novasRepresentadas,
+      itensVenda: atual.itensVenda.filter((item) => item.representadaId && novasRepresentadas.includes(item.representadaId)),
       origemClienteId: anterior?.destinoClienteId || anterior?.clienteId || "",
       destinoClienteId: clienteId,
       statusCliente: cliente?.status || "Ativo",
+    }));
+
+    setNovoProdutoRapido((atual) => ({
+      ...atual,
+      representadaId: novasRepresentadas.length === 1 ? novasRepresentadas[0] : "",
     }));
   }
 
@@ -285,33 +324,115 @@ export default function VisitasPage() {
     }));
   }
 
-  function alternarProdutoVenda(produto: string, marcado: boolean) {
+  function itemCorrespondeProduto(item: ItemVendaInput, produto: ProdutoModulo) {
+    if (item.produtoId) return item.produtoId === produto.id;
+    if (item.representadaId !== produto.representadaId) return false;
+
+    const mesmoCodigo = Boolean(
+      produto.codigo
+      && item.codigo
+      && produto.codigo.trim().toLocaleLowerCase("pt-BR") === item.codigo.trim().toLocaleLowerCase("pt-BR"),
+    );
+
+    return mesmoCodigo
+      || item.produto.trim().toLocaleLowerCase("pt-BR") === produto.nome.trim().toLocaleLowerCase("pt-BR");
+  }
+
+  function chaveItemVenda(item: ItemVendaInput) {
+    return item.produtoId || `${item.representadaId || "sem-rep"}:${item.codigo || "sem-codigo"}:${item.produto}`;
+  }
+
+  function alternarProdutoVenda(produto: ProdutoModulo, marcado: boolean) {
     setForm((atual) => ({
       ...atual,
       itensVenda: marcado
-        ? atual.itensVenda.some((item) => item.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR"))
+        ? atual.itensVenda.some((item) => itemCorrespondeProduto(item, produto))
           ? atual.itensVenda
-          : [...atual.itensVenda, { produto, quantidade: "", unidade: "", valorUnitario: "", valorTotal: "", codigo: "", representadaId: atual.representadaIds.length === 1 ? atual.representadaIds[0] : "" }]
-        : atual.itensVenda.filter((item) => item.produto.toLocaleLowerCase("pt-BR") !== produto.toLocaleLowerCase("pt-BR")),
+          : [
+              ...atual.itensVenda,
+              {
+                produtoId: produto.id,
+                produto: produto.nome,
+                quantidade: "",
+                unidade: produto.unidade,
+                valorUnitario: "",
+                valorTotal: "",
+                codigo: produto.codigo,
+                representadaId: produto.representadaId,
+              },
+            ]
+        : atual.itensVenda.filter((item) => !itemCorrespondeProduto(item, produto)),
     }));
   }
 
-  function adicionarProdutoVenda() {
-    const produto = form.novoProduto.trim();
-    if (!produto) return;
-    alternarProdutoVenda(produto, true);
-    setForm((atual) => ({ ...atual, novoProduto: "" }));
-  }
-
-  function atualizarProdutoVenda(produto: string, campo: keyof ItemVendaInput, valor: string) {
+  function atualizarProdutoVenda(chave: string, campo: keyof ItemVendaInput, valor: string) {
     setForm((atual) => ({
       ...atual,
       itensVenda: atual.itensVenda.map((item) =>
-        item.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR")
-          ? { ...item, [campo]: valor }
-          : item,
+        chaveItemVenda(item) === chave ? { ...item, [campo]: valor } : item,
       ),
     }));
+  }
+
+  function abrirCadastroProdutoRapido() {
+    setNovoProdutoRapido({
+      representadaId: form.representadaIds.length === 1 ? form.representadaIds[0] : "",
+      codigo: "",
+      nome: "",
+      unidade: "",
+      comissaoPercentual: "",
+    });
+    setMostrarCadastroProduto(true);
+    setErro("");
+  }
+
+  async function cadastrarProdutoRapido() {
+    if (salvandoProdutoRapido) return;
+
+    if (!novoProdutoRapido.representadaId) {
+      setErro("Selecione a representada do novo produto.");
+      return;
+    }
+
+    if (!novoProdutoRapido.nome.trim()) {
+      setErro("Informe o nome do novo produto.");
+      return;
+    }
+
+    setSalvandoProdutoRapido(true);
+    setErro("");
+
+    try {
+      const produtoId = await salvarProduto({
+        representadaId: novoProdutoRapido.representadaId,
+        codigo: novoProdutoRapido.codigo,
+        nome: novoProdutoRapido.nome,
+        unidade: novoProdutoRapido.unidade,
+        ativo: true,
+        comissaoPercentual: novoProdutoRapido.comissaoPercentual === ""
+          ? null
+          : Number(novoProdutoRapido.comissaoPercentual.replace(",", ".")),
+      });
+
+      const listaAtualizada = (await carregarProdutosModulo()).filter((produto) => produto.ativo);
+      setProdutosCatalogo(listaAtualizada);
+
+      const produtoCriado = listaAtualizada.find((produto) => produto.id === produtoId);
+      if (produtoCriado) alternarProdutoVenda(produtoCriado, true);
+
+      setMostrarCadastroProduto(false);
+      setNovoProdutoRapido({
+        representadaId: "",
+        codigo: "",
+        nome: "",
+        unidade: "",
+        comissaoPercentual: "",
+      });
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível cadastrar o produto.");
+    } finally {
+      setSalvandoProdutoRapido(false);
+    }
   }
 
   function editar(visita: VisitaDetalhada) {
@@ -334,7 +455,6 @@ export default function VisitasPage() {
       condicoesPrazo: visita.condicoesPrazo,
       situacaoVenda: visita.situacaoVenda,
       itensVenda: visita.itensVenda,
-      novoProduto: "",
       resultado: visita.resultado,
       proximaAcao: visita.proximaAcao,
       proximaData: visita.proximaData,
