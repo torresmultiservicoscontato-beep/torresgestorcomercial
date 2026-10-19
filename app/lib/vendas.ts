@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import type { RepresentadaOperacional } from "./data";
 
 export type ItemVendaInput = {
+  produtoId?: string;
   produto: string;
   codigo?: string;
   quantidade?: string;
@@ -16,6 +17,7 @@ export type ItemVendaInput = {
 
 export type ItemVenda = {
   id: string;
+  produtoId: string | null;
   produto: string;
   codigo: string;
   quantidade: number | null;
@@ -191,7 +193,7 @@ export async function carregarVendas(): Promise<Venda[]> {
 
   const [{ data: relRep, error: repError }, { data: itens, error: itensError }, { data: anexos, error: anexosError }] = await Promise.all([
     cliente.from("venda_representadas").select("venda_id,representada_id").in("venda_id", vendaIds),
-    cliente.from("venda_itens").select("id,venda_id,representada_id,produto,codigo,quantidade,unidade,valor_unitario,valor_total,origem,confirmado").in("venda_id", vendaIds).order("created_at"),
+    cliente.from("venda_itens").select("id,venda_id,representada_id,produto_id,produto,codigo,quantidade,unidade,valor_unitario,valor_total,origem,confirmado").in("venda_id", vendaIds).order("created_at"),
     cliente.from("venda_anexos").select("id,venda_id,nome_arquivo,caminho_storage,tipo_mime,tamanho_bytes,status_extracao").in("venda_id", vendaIds).order("created_at"),
   ]);
 
@@ -224,6 +226,7 @@ export async function carregarVendas(): Promise<Venda[]> {
     const lista = itensPorVenda.get(item.venda_id) ?? [];
     lista.push({
       id: item.id,
+      produtoId: item.produto_id ?? null,
       produto: item.produto,
       codigo: item.codigo ?? "",
       quantidade: numero(item.quantidade),
@@ -326,6 +329,7 @@ export async function salvarComplementoVenda(venda: Venda, input: {
     .map((item) => ({
       venda_id: venda.id,
       representada_id: item.representadaId || null,
+      produto_id: item.produtoId || null,
       produto: item.produto.trim(),
       codigo: item.codigo?.trim() ?? "",
       quantidade: item.quantidade ? Number(item.quantidade.replace(",", ".")) : null,
