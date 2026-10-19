@@ -745,21 +745,16 @@ export default function VisitasPage() {
                       <ClipboardCheck size={17} />
                       <div>
                         <strong>Situação do pedido</strong>
-                        <span>Escolha a situação atual da venda.</span>
+                        <span>O pedido nasce como Pedido lançado. Faturamento, liquidação e comissão passam a ser controlados no módulo Comissões.</span>
                       </div>
                     </div>
                     <div className="representadasChecklist">
-                      {["Pedido lançado", "Faturado", "Liquidado parcial", "Liquidado", "Cancelado"].map((situacao) => (
-                        <label className="representadaOption" key={situacao} style={form.situacaoVenda === situacao ? { borderColor: "var(--blue)", background: "#edf4ff" } : undefined}>
-                          <input
-                            type="radio"
-                            name="situacaoVenda"
-                            checked={form.situacaoVenda === situacao}
-                            onChange={() => setForm((atual) => ({ ...atual, situacaoVenda: situacao }))}
-                          />
-                          <span><strong>{situacao}</strong></span>
-                        </label>
-                      ))}
+                      <div className="representadaOption" style={{ borderColor: "var(--blue)", background: "#edf4ff" }}>
+                        <span>
+                          <strong>Pedido lançado</strong>
+                          <small>Após salvar a visita, o representante acompanha o fluxo financeiro em Comissões.</small>
+                        </span>
+                      </div>
                     </div>
                   </div>
 
