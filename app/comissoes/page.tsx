@@ -48,6 +48,7 @@ export default function ComissoesPage() {
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroRepresentada, setFiltroRepresentada] = useState("");
   const [filtroResponsavel, setFiltroResponsavel] = useState("");
+  const [visao, setVisao] = useState<"geral" | "representante" | "prepostos">("geral");
 
   const [faturamento, setFaturamento] = useState({
     numeroPedido: "",
@@ -84,36 +85,41 @@ export default function ComissoesPage() {
   }, []);
 
   const representadas = useMemo(() => Array.from(new Set(pedidos.map((item) => item.representadaNome))).sort(), [pedidos]);
-  const responsaveis = useMemo(() => Array.from(new Set(pedidos.map((item) => item.responsavelNome))).sort(), [pedidos]);
+  const prepostos = useMemo(
+    () => Array.from(new Set(
+      pedidos
+        .filter((item) => item.comissaoPrepostoTotal > 0)
+        .map((item) => item.responsavelNome),
+    )).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [pedidos],
+  );
 
   const filtrados = useMemo(() => pedidos.filter((item) => {
     const bateStatus = !filtroStatus || item.statusPedido === filtroStatus;
     const bateRep = !filtroRepresentada || item.representadaNome === filtroRepresentada;
     const bateResp = !filtroResponsavel || item.responsavelNome === filtroResponsavel;
-    return bateStatus && bateRep && bateResp;
-  }), [pedidos, filtroStatus, filtroRepresentada, filtroResponsavel]);
+    const bateVisao = visao !== "prepostos" || item.comissaoPrepostoTotal > 0;
+    return bateStatus && bateRep && bateResp && bateVisao;
+  }), [pedidos, filtroStatus, filtroRepresentada, filtroResponsavel, visao]);
 
   const resumo = useMemo(() => {
-    if (modo === "preposto") {
-      return {
-        previsto: pedidos.reduce((s, p) => s + p.comissaoPrepostoTotal, 0),
-        liberado: pedidos.reduce((s, p) => s + p.comissaoPrepostoLiberada, 0),
-        pago: pedidos.reduce((s, p) => s + p.comissaoPrepostoPaga, 0),
-        pendente: pedidos.reduce((s, p) => s + Math.max(p.comissaoPrepostoLiberada - p.comissaoPrepostoPaga, 0), 0),
-        prepostoPendente: 0,
-        prepostoPago: 0,
-      };
-    }
+    const base = filtrados;
 
     return {
-      previsto: pedidos.reduce((s, p) => s + (p.comissaoRepresentanteTotal ?? 0), 0),
-      liberado: pedidos.reduce((s, p) => s + (p.comissaoRepresentanteLiberada ?? 0), 0),
-      pago: pedidos.reduce((s, p) => s + (p.comissaoRepresentanteRecebida ?? 0), 0),
-      pendente: pedidos.reduce((s, p) => s + Math.max((p.comissaoRepresentanteLiberada ?? 0) - (p.comissaoRepresentanteRecebida ?? 0), 0), 0),
-      prepostoPendente: pedidos.reduce((s, p) => s + Math.max(p.comissaoPrepostoLiberada - p.comissaoPrepostoPaga, 0), 0),
-      prepostoPago: pedidos.reduce((s, p) => s + p.comissaoPrepostoPaga, 0),
+      representante: {
+        previsto: base.reduce((s, p) => s + (p.comissaoRepresentanteTotal ?? 0), 0),
+        liberado: base.reduce((s, p) => s + (p.comissaoRepresentanteLiberada ?? 0), 0),
+        recebido: base.reduce((s, p) => s + (p.comissaoRepresentanteRecebida ?? 0), 0),
+        receber: base.reduce((s, p) => s + Math.max((p.comissaoRepresentanteLiberada ?? 0) - (p.comissaoRepresentanteRecebida ?? 0), 0), 0),
+      },
+      prepostos: {
+        previsto: base.reduce((s, p) => s + p.comissaoPrepostoTotal, 0),
+        liberado: base.reduce((s, p) => s + p.comissaoPrepostoLiberada, 0),
+        pago: base.reduce((s, p) => s + p.comissaoPrepostoPaga, 0),
+        pagar: base.reduce((s, p) => s + Math.max(p.comissaoPrepostoLiberada - p.comissaoPrepostoPaga, 0), 0),
+      },
     };
-  }, [pedidos, modo]);
+  }, [filtrados]);
 
   async function abrir(item: ComissaoPedido) {
     if (abertoId === item.ordemId) {
@@ -257,15 +263,41 @@ export default function ComissoesPage() {
       {erro && <div className="loginAlert error settingsAlert">{erro}</div>}
       {mensagem && <div className="loginAlert success settingsAlert">{mensagem}</div>}
 
+      {modo === "gestao" && (
+        <section className={styles.viewSwitch} aria-label="Visão das comissões">
+          <button type="button" className={visao === "geral" ? styles.viewActive : ""} onClick={() => { setVisao("geral"); setFiltroResponsavel(""); }}>
+            Geral
+          </button>
+          <button type="button" className={visao === "representante" ? styles.viewActive : ""} onClick={() => { setVisao("representante"); setFiltroResponsavel(""); }}>
+            Representante
+          </button>
+          <button type="button" className={visao === "prepostos" ? styles.viewActive : ""} onClick={() => setVisao("prepostos")}>
+            Prepostos
+          </button>
+        </section>
+      )}
+
       <section className={styles.stats}>
-        <article><ReceiptText size={18} /><span>Comissão prevista</span><strong>{moeda(resumo.previsto)}</strong></article>
-        <article><CircleDollarSign size={18} /><span>Comissão liberada</span><strong>{moeda(resumo.liberado)}</strong></article>
-        <article><BadgeDollarSign size={18} /><span>A receber</span><strong>{moeda(resumo.pendente)}</strong></article>
-        <article><WalletCards size={18} /><span>Já recebida</span><strong>{moeda(resumo.pago)}</strong></article>
-        {modo === "gestao" && (
+        {(modo === "preposto" || visao === "prepostos") ? (
           <>
-            <article><Banknote size={18} /><span>A pagar aos prepostos</span><strong>{moeda(resumo.prepostoPendente)}</strong></article>
-            <article><CheckCircle2 size={18} /><span>Pago aos prepostos</span><strong>{moeda(resumo.prepostoPago)}</strong></article>
+            <article><ReceiptText size={18} /><span>Prevista dos prepostos</span><strong>{moeda(resumo.prepostos.previsto)}</strong></article>
+            <article><CircleDollarSign size={18} /><span>Liberada</span><strong>{moeda(resumo.prepostos.liberado)}</strong></article>
+            <article><BadgeDollarSign size={18} /><span>A pagar</span><strong>{moeda(resumo.prepostos.pagar)}</strong></article>
+            <article><CheckCircle2 size={18} /><span>Paga</span><strong>{moeda(resumo.prepostos.pago)}</strong></article>
+          </>
+        ) : visao === "representante" ? (
+          <>
+            <article><ReceiptText size={18} /><span>Comissão prevista</span><strong>{moeda(resumo.representante.previsto)}</strong></article>
+            <article><CircleDollarSign size={18} /><span>Comissão liberada</span><strong>{moeda(resumo.representante.liberado)}</strong></article>
+            <article><BadgeDollarSign size={18} /><span>A receber</span><strong>{moeda(resumo.representante.receber)}</strong></article>
+            <article><WalletCards size={18} /><span>Recebida</span><strong>{moeda(resumo.representante.recebido)}</strong></article>
+          </>
+        ) : (
+          <>
+            <article><BadgeDollarSign size={18} /><span>Representante a receber</span><strong>{moeda(resumo.representante.receber)}</strong></article>
+            <article><WalletCards size={18} /><span>Representante recebido</span><strong>{moeda(resumo.representante.recebido)}</strong></article>
+            <article><Banknote size={18} /><span>A pagar aos prepostos</span><strong>{moeda(resumo.prepostos.pagar)}</strong></article>
+            <article><CheckCircle2 size={18} /><span>Pago aos prepostos</span><strong>{moeda(resumo.prepostos.pago)}</strong></article>
           </>
         )}
       </section>
@@ -289,12 +321,12 @@ export default function ComissoesPage() {
             <option>Cancelado</option>
           </select>
         </label>
-        {modo === "gestao" && (
+        {modo === "gestao" && visao === "prepostos" && (
           <label className="field">
-            Responsável
+            Preposto
             <select value={filtroResponsavel} onChange={(e) => setFiltroResponsavel(e.target.value)}>
-              <option value="">Todos</option>
-              {responsaveis.map((nome) => <option key={nome}>{nome}</option>)}
+              <option value="">Todos os prepostos</option>
+              {prepostos.map((nome) => <option key={nome}>{nome}</option>)}
             </select>
           </label>
         )}
@@ -322,18 +354,20 @@ export default function ComissoesPage() {
               </button>
 
               <div className={styles.summary}>
-                <div><span>Faturado</span><strong>{moeda(item.valorFaturado)}</strong></div>
-                <div><span>Liquidado</span><strong>{moeda(item.valorLiquidado)}</strong></div>
-                <div><span>Regra</span><strong>{item.baseComissao === "faturado" ? "Faturado" : "Liquidado"}</strong></div>
-                {modo === "gestao" ? (
+                {(modo === "preposto" || visao === "prepostos") ? (
                   <>
-                    <div><span>Comissão liberada</span><strong>{moeda(item.comissaoRepresentanteLiberada ?? 0)}</strong></div>
-                    <div><span>A receber</span><strong>{moeda(repPendente)}</strong></div>
+                    <div><span>Comissão prevista</span><strong>{moeda(item.comissaoPrepostoTotal)}</strong></div>
+                    <div><span>Liberada</span><strong>{moeda(item.comissaoPrepostoLiberada)}</strong></div>
+                    <div><span>Paga</span><strong>{moeda(item.comissaoPrepostoPaga)}</strong></div>
+                    <div><span>Saldo</span><strong>{moeda(prepPendente)}</strong></div>
                   </>
                 ) : (
                   <>
-                    <div><span>Sua comissão liberada</span><strong>{moeda(item.comissaoPrepostoLiberada)}</strong></div>
-                    <div><span>A receber</span><strong>{moeda(prepPendente)}</strong></div>
+                    <div><span>Faturado</span><strong>{moeda(item.valorFaturado)}</strong></div>
+                    <div><span>Liquidado</span><strong>{moeda(item.valorLiquidado)}</strong></div>
+                    <div><span>Regra</span><strong>{item.baseComissao === "faturado" ? "Faturado" : "Liquidado"}</strong></div>
+                    <div><span>Comissão liberada</span><strong>{moeda(item.comissaoRepresentanteLiberada ?? 0)}</strong></div>
+                    <div><span>A receber</span><strong>{moeda(repPendente)}</strong></div>
                   </>
                 )}
               </div>
@@ -422,6 +456,7 @@ export default function ComissoesPage() {
 
                     {modo === "gestao" ? (
                       <div className={styles.commissionGrid}>
+                        {visao !== "prepostos" && (
                         <div className={styles.commissionBox}>
                           <span>Representante</span>
                           <strong>{moeda(item.comissaoRepresentanteTotal ?? 0)}</strong>
@@ -435,6 +470,7 @@ export default function ComissoesPage() {
                             </div>
                           )}
                         </div>
+                        )}
 
                         {item.responsavelUserId && item.comissaoPrepostoTotal > 0 && (
                           <div className={styles.commissionBox}>
