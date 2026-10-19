@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BadgeDollarSign,
   BarChart3,
   Boxes,
   CalendarDays,
@@ -46,6 +47,7 @@ const operacionais = [
   { label: "Rotas", href: "/rotas", icon: MapPinned, modulo: "rotas", enabled: true },
   { label: "Visitas", href: "/visitas", icon: ClipboardCheck, modulo: "visitas", enabled: true },
   { label: "Vendas", href: "/vendas", icon: ShoppingCart, modulo: "vendas", enabled: true },
+  { label: "Comissões", href: "/comissoes", icon: BadgeDollarSign, modulo: "comissoes", enabled: true },
   { label: "Agenda", href: "#", icon: CalendarDays, modulo: "agenda", enabled: false },
   { label: "Relatórios", href: "#", icon: BarChart3, modulo: "relatorios", enabled: false },
 ];
@@ -176,7 +178,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   const menuOperacional = operacionais.filter((item) => {
-    if (item.modulo === "inicio" || item.modulo === "representadas" || item.modulo === "produtos") return true;
+    if (item.modulo === "inicio" || item.modulo === "representadas" || item.modulo === "produtos" || item.modulo === "comissoes") return true;
     return pode(acesso, item.modulo, "visualizar");
   });
 
