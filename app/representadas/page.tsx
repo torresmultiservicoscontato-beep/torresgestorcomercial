@@ -1,17 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Building2, PackagePlus, Pencil, Plus, Save, Users, X } from "lucide-react";
+import { Building2, Pencil, Plus, Save, Users, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import {
   carregarPrepostosRepresentada,
-  carregarProdutosRepresentada,
   carregarRepresentadasModulo,
-  salvarProdutoRepresentada,
   salvarRepresentada,
   salvarRepassePreposto,
   type PrepostoRepresentada,
-  type ProdutoRepresentada,
   type RepresentadaModulo,
 } from "../lib/representadas";
 import styles from "./representadas.module.css";
@@ -41,9 +38,7 @@ export default function RepresentadasPage() {
   const [form, setForm] = useState(vazio());
   const [salvando, setSalvando] = useState(false);
   const [abertaId, setAbertaId] = useState<string | null>(null);
-  const [produtos, setProdutos] = useState<ProdutoRepresentada[]>([]);
   const [prepostos, setPrepostos] = useState<PrepostoRepresentada[]>([]);
-  const [produtoForm, setProdutoForm] = useState({ id: "", codigo: "", nome: "", unidade: "", ativo: true });
   const [repasseDraft, setRepasseDraft] = useState<Record<string, { comissao: string; dia: string }>>({});
 
   async function recarregar() {
@@ -54,6 +49,7 @@ export default function RepresentadasPage() {
 
   useEffect(() => {
     let ativo = true;
+
     void carregarRepresentadasModulo()
       .then((dados) => {
         if (!ativo) return;
@@ -66,6 +62,7 @@ export default function RepresentadasPage() {
       .finally(() => {
         if (ativo) setCarregando(false);
       });
+
     return () => { ativo = false; };
   }, []);
 
@@ -98,6 +95,7 @@ export default function RepresentadasPage() {
   async function salvar(event: FormEvent) {
     event.preventDefault();
     if (salvando) return;
+
     setSalvando(true);
     setErro("");
     setMensagem("");
@@ -115,6 +113,7 @@ export default function RepresentadasPage() {
         diaRecebimentoComissao: form.diaRecebimentoComissao ? Number(form.diaRecebimentoComissao) : null,
         observacaoComissao: form.observacaoComissao,
       });
+
       await recarregar();
       setMostrarForm(false);
       setForm(vazio());
@@ -126,20 +125,15 @@ export default function RepresentadasPage() {
     }
   }
 
-  async function abrirDetalhes(item: RepresentadaModulo) {
-    if (modo === "preposto") return;
+  async function abrirPrepostos(item: RepresentadaModulo) {
     const novoId = abertaId === item.id ? null : item.id;
     setAbertaId(novoId);
     if (!novoId) return;
 
     try {
-      const [listaProdutos, listaPrepostos] = await Promise.all([
-        carregarProdutosRepresentada(item.id),
-        carregarPrepostosRepresentada(item.id),
-      ]);
-      setProdutos(listaProdutos);
-      setPrepostos(listaPrepostos);
-      setRepasseDraft(Object.fromEntries(listaPrepostos.map((preposto) => [
+      const lista = await carregarPrepostosRepresentada(item.id);
+      setPrepostos(lista);
+      setRepasseDraft(Object.fromEntries(lista.map((preposto) => [
         preposto.vinculoId,
         {
           comissao: String(preposto.comissaoPrepostoPercentual),
@@ -147,31 +141,14 @@ export default function RepresentadasPage() {
         },
       ])));
     } catch (falha) {
-      setErro(falha instanceof Error ? falha.message : "Não foi possível abrir os detalhes da representada.");
-    }
-  }
-
-  async function salvarProduto(event: FormEvent, representadaId: string) {
-    event.preventDefault();
-    try {
-      await salvarProdutoRepresentada(representadaId, {
-        id: produtoForm.id || null,
-        codigo: produtoForm.codigo,
-        nome: produtoForm.nome,
-        unidade: produtoForm.unidade,
-        ativo: produtoForm.ativo,
-      });
-      setProdutos(await carregarProdutosRepresentada(representadaId));
-      setProdutoForm({ id: "", codigo: "", nome: "", unidade: "", ativo: true });
-      setMensagem("Produto salvo.");
-    } catch (falha) {
-      setErro(falha instanceof Error ? falha.message : "Não foi possível salvar o produto.");
+      setErro(falha instanceof Error ? falha.message : "Não foi possível carregar os prepostos.");
     }
   }
 
   async function salvarRepasse(item: RepresentadaModulo, preposto: PrepostoRepresentada) {
     const draft = repasseDraft[preposto.vinculoId];
     if (!draft) return;
+
     try {
       await salvarRepassePreposto({
         representadaId: item.id,
@@ -193,10 +170,11 @@ export default function RepresentadasPage() {
           <h1>Representadas</h1>
           <p>
             {modo === "preposto"
-              ? "Consulte as representadas vinculadas à sua operação e as condições da sua comissão."
-              : "Cadastre dados comerciais, produtos, regras de comissão e repasses para prepostos."}
+              ? "Consulte suas representadas, comissão padrão e previsão de pagamento."
+              : "Cadastre dados da representada, regra geral de comissão e repasse padrão para os prepostos."}
           </p>
         </div>
+
         {modo === "gestao" && (
           <button className="primary" type="button" onClick={mostrarForm ? () => setMostrarForm(false) : nova}>
             {mostrarForm ? <X size={18} /> : <Plus size={18} />}
@@ -222,18 +200,22 @@ export default function RepresentadasPage() {
               Nome da representada *
               <input required value={form.nome} readOnly={Boolean(form.id)} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
             </label>
+
             <label className="field">
               CNPJ
               <input value={form.cnpj} onChange={(e) => setForm({ ...form, cnpj: e.target.value })} />
             </label>
+
             <label className="field">
               Telefone
               <input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
             </label>
+
             <label className="field span2">
               E-mail
               <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </label>
+
             <label className="field span2">
               Endereço
               <input value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} />
@@ -244,15 +226,17 @@ export default function RepresentadasPage() {
             <div className="settingsSectionTitle">
               <Building2 size={18} />
               <div>
-                <strong>Comissão do representante</strong>
-                <span>Defina quanto a representada paga e qual é o fato gerador da comissão.</span>
+                <strong>Comissão geral do representante</strong>
+                <span>Esta será a regra padrão. Produtos com regra diferente serão tratados no módulo Produtos.</span>
               </div>
             </div>
+
             <div className="formGrid">
               <label className="field">
-                Comissão (%)
+                Comissão geral (%)
                 <input type="number" min="0" max="100" step="0.01" value={form.comissaoPercentual} onChange={(e) => setForm({ ...form, comissaoPercentual: e.target.value })} />
               </label>
+
               <label className="field">
                 Comissão calculada sobre
                 <select value={form.baseComissao} onChange={(e) => setForm({ ...form, baseComissao: e.target.value as "liquidado" | "faturado" })}>
@@ -260,10 +244,12 @@ export default function RepresentadasPage() {
                   <option value="faturado">Faturado</option>
                 </select>
               </label>
+
               <label className="field">
                 Dia previsto para receber
                 <input type="number" min="1" max="31" value={form.diaRecebimentoComissao} onChange={(e) => setForm({ ...form, diaRecebimentoComissao: e.target.value })} placeholder="Ex.: 15" />
               </label>
+
               <label className="field span2">
                 Observação da comissão
                 <textarea rows={3} value={form.observacaoComissao} onChange={(e) => setForm({ ...form, observacaoComissao: e.target.value })} placeholder="Ex.: comissão paga no mês seguinte ao fechamento." />
@@ -293,8 +279,8 @@ export default function RepresentadasPage() {
                   <button className="secondary" type="button" onClick={() => editar(item)}>
                     <Pencil size={14} /> Editar
                   </button>
-                  <button className="secondary" type="button" onClick={() => void abrirDetalhes(item)}>
-                    {abertaId === item.id ? "Fechar detalhes" : "Produtos e prepostos"}
+                  <button className="secondary" type="button" onClick={() => void abrirPrepostos(item)}>
+                    {abertaId === item.id ? "Fechar prepostos" : "Repasse para prepostos"}
                   </button>
                 </div>
               )}
@@ -302,13 +288,22 @@ export default function RepresentadasPage() {
 
             {modo === "preposto" ? (
               <div className={styles.prepostoGrid}>
-                <div><span>Sua comissão</span><strong>{(item.comissaoPrepostoPercentual ?? 0).toLocaleString("pt-BR")}%</strong></div>
-                <div><span>Base</span><strong>{item.baseComissao === "liquidado" ? "Liquidado" : "Faturado"}</strong></div>
-                <div><span>Previsão de pagamento</span><strong>{item.diaPagamentoPreposto ? `Dia ${item.diaPagamentoPreposto}` : "Não informada"}</strong></div>
+                <div>
+                  <span>Sua comissão padrão</span>
+                  <strong>{(item.comissaoPrepostoPercentual ?? 0).toLocaleString("pt-BR")}%</strong>
+                </div>
+                <div>
+                  <span>Base</span>
+                  <strong>{item.baseComissao === "liquidado" ? "Liquidado" : "Faturado"}</strong>
+                </div>
+                <div>
+                  <span>Previsão de pagamento</span>
+                  <strong>{item.diaPagamentoPreposto ? `Dia ${item.diaPagamentoPreposto}` : "Não informada"}</strong>
+                </div>
               </div>
             ) : (
               <div className={styles.summary}>
-                <span>Comissão: <strong>{(item.comissaoPercentual ?? 0).toLocaleString("pt-BR")}%</strong></span>
+                <span>Comissão geral: <strong>{(item.comissaoPercentual ?? 0).toLocaleString("pt-BR")}%</strong></span>
                 <span>Base: <strong>{item.baseComissao === "liquidado" ? "Liquidado" : "Faturado"}</strong></span>
                 <span>Recebimento: <strong>{item.diaRecebimentoComissao ? `dia ${item.diaRecebimentoComissao}` : "não informado"}</strong></span>
               </div>
@@ -318,52 +313,35 @@ export default function RepresentadasPage() {
               <div className={styles.details}>
                 <section>
                   <div className="settingsSectionTitle">
-                    <PackagePlus size={18} />
-                    <div>
-                      <strong>Produtos da representada</strong>
-                      <span>Este catálogo será usado depois para relatórios e identificação de itens vendidos.</span>
-                    </div>
-                  </div>
-
-                  <form className={styles.productForm} onSubmit={(e) => void salvarProduto(e, item.id)}>
-                    <input placeholder="Código" value={produtoForm.codigo} onChange={(e) => setProdutoForm({ ...produtoForm, codigo: e.target.value })} />
-                    <input required placeholder="Produto" value={produtoForm.nome} onChange={(e) => setProdutoForm({ ...produtoForm, nome: e.target.value })} />
-                    <input placeholder="Unidade" value={produtoForm.unidade} onChange={(e) => setProdutoForm({ ...produtoForm, unidade: e.target.value })} />
-                    <button className="primary" type="submit"><Plus size={14} /> Salvar produto</button>
-                  </form>
-
-                  <div className={styles.simpleList}>
-                    {produtos.map((produto) => (
-                      <button type="button" key={produto.id} onClick={() => setProdutoForm({ id: produto.id, codigo: produto.codigo, nome: produto.nome, unidade: produto.unidade, ativo: produto.ativo })}>
-                        <strong>{produto.nome}</strong>
-                        <span>{[produto.codigo, produto.unidade].filter(Boolean).join(" • ") || "Sem código/unidade"}</span>
-                      </button>
-                    ))}
-                    {produtos.length === 0 && <div className="emptyState">Nenhum produto cadastrado.</div>}
-                  </div>
-                </section>
-
-                <section>
-                  <div className="settingsSectionTitle">
                     <Users size={18} />
                     <div>
-                      <strong>Repasse para prepostos</strong>
-                      <span>Defina a comissão que cada preposto receberá e o dia previsto para pagamento.</span>
+                      <strong>Repasse padrão para prepostos</strong>
+                      <span>Esta comissão vale para todos os produtos, exceto quando houver uma regra específica no módulo Produtos.</span>
                     </div>
                   </div>
 
                   <div className={styles.simpleList}>
                     {prepostos.map((preposto) => {
                       const draft = repasseDraft[preposto.vinculoId] ?? { comissao: "", dia: "" };
+
                       return (
                         <div className={styles.repasse} key={preposto.vinculoId}>
                           <strong>{preposto.nome}</strong>
-                          <label>Comissão %<input type="number" min="0" max="100" step="0.01" value={draft.comissao} onChange={(e) => setRepasseDraft({ ...repasseDraft, [preposto.vinculoId]: { ...draft, comissao: e.target.value } })} /></label>
-                          <label>Dia do pagamento<input type="number" min="1" max="31" value={draft.dia} onChange={(e) => setRepasseDraft({ ...repasseDraft, [preposto.vinculoId]: { ...draft, dia: e.target.value } })} /></label>
-                          <button className="secondary" type="button" onClick={() => void salvarRepasse(item, preposto)}><Save size={14} /> Salvar</button>
+                          <label>
+                            Comissão padrão %
+                            <input type="number" min="0" max="100" step="0.01" value={draft.comissao} onChange={(e) => setRepasseDraft({ ...repasseDraft, [preposto.vinculoId]: { ...draft, comissao: e.target.value } })} />
+                          </label>
+                          <label>
+                            Dia do pagamento
+                            <input type="number" min="1" max="31" value={draft.dia} onChange={(e) => setRepasseDraft({ ...repasseDraft, [preposto.vinculoId]: { ...draft, dia: e.target.value } })} />
+                          </label>
+                          <button className="secondary" type="button" onClick={() => void salvarRepasse(item, preposto)}>
+                            <Save size={14} /> Salvar
+                          </button>
                         </div>
                       );
                     })}
+
                     {prepostos.length === 0 && <div className="emptyState">Nenhum preposto vinculado a esta representada.</div>}
                   </div>
                 </section>
