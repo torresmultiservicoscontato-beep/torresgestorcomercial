@@ -156,7 +156,7 @@ export default function VisitasPage() {
         setProdutosCatalogo(listaProdutos.filter((produto) => produto.ativo));
         setPodeCadastrar(pode(acesso, "visitas", "cadastrar"));
         setPodeEditar(pode(acesso, "visitas", "editar"));
-        setPodeCadastrarProduto(acesso?.papel !== "preposto");
+        setPodeCadastrarProduto(Boolean(acesso && acesso.papel !== "preposto"));
       })
       .catch((falha: Error) => {
         if (!ativo) return;
