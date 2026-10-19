@@ -291,7 +291,7 @@ export default function VisitasPage() {
       itensVenda: marcado
         ? atual.itensVenda.some((item) => item.produto.toLocaleLowerCase("pt-BR") === produto.toLocaleLowerCase("pt-BR"))
           ? atual.itensVenda
-          : [...atual.itensVenda, { produto, quantidade: "", unidade: "", valorUnitario: "", valorTotal: "", codigo: "", representadaId: "" }]
+          : [...atual.itensVenda, { produto, quantidade: "", unidade: "", valorUnitario: "", valorTotal: "", codigo: "", representadaId: atual.representadaIds.length === 1 ? atual.representadaIds[0] : "" }]
         : atual.itensVenda.filter((item) => item.produto.toLocaleLowerCase("pt-BR") !== produto.toLocaleLowerCase("pt-BR")),
     }));
   }
@@ -390,6 +390,11 @@ export default function VisitasPage() {
 
     if (representadasSelecionadas.length !== form.representadaIds.length) {
       setErro("Uma ou mais representadas selecionadas não estão disponíveis nesta operação.");
+      return;
+    }
+
+    if (form.houveVenda && form.representadaIds.length > 1 && form.itensVenda.some((item) => !item.representadaId)) {
+      setErro("Quando a venda envolve mais de uma representada, informe a representada de cada produto.");
       return;
     }
 
@@ -822,6 +827,24 @@ export default function VisitasPage() {
                           Produto
                           <input readOnly value={item.produto} />
                         </label>
+                        {form.representadaIds.length > 1 && (
+                          <label className="field span2">
+                            Representada deste produto *
+                            <select
+                              required
+                              value={item.representadaId ?? ""}
+                              onChange={(event) => atualizarProdutoVenda(item.produto, "representadaId", event.target.value)}
+                            >
+                              <option value="">Selecionar representada</option>
+                              {representadasOperacionais
+                                .filter((representada) => form.representadaIds.includes(representada.id))
+                                .map((representada) => (
+                                  <option key={representada.id} value={representada.id}>{representada.nome}</option>
+                                ))}
+                            </select>
+                            <small>Essa definição separa faturamento e comissão quando a visita gera pedidos para mais de uma representada.</small>
+                          </label>
+                        )}
                         <label className="field">
                           Quantidade
                           <input value={item.quantidade ?? ""} onChange={(event) => atualizarProdutoVenda(item.produto, "quantidade", event.target.value)} inputMode="decimal" />
