@@ -314,7 +314,7 @@ export default function ProdutosPage() {
               <input
                 type="number"
                 min="0"
-                max={representadaDoForm?.comissaoGeral ?? 100}
+                max="100"
                 step="0.01"
                 value={form.comissaoPercentual}
                 onChange={(event) => setForm({ ...form, comissaoPercentual: event.target.value })}
