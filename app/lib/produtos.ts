@@ -210,3 +210,13 @@ export async function salvarComissaoProdutoPreposto(input: {
 
   if (error) throw new Error(`Falha ao salvar comissão do produto: ${error.message}`);
 }
+
+export async function excluirProduto(produtoId: string) {
+  const { cliente, titularUserId, acesso } = await contexto();
+  if (acesso.papel === "preposto") throw new Error("Preposto não pode excluir produtos.");
+  const { error } = await cliente.rpc("excluir_produto", {
+    p_titular_user_id: titularUserId,
+    p_produto_id: produtoId,
+  });
+  if (error) throw new Error(`Falha ao excluir produto: ${error.message}`);
+}

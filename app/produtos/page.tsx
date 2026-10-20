@@ -12,6 +12,7 @@ import {
   Save,
   Search,
   Upload,
+  Trash2,
   X,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
@@ -22,6 +23,7 @@ import {
   carregarRepresentadasProdutos,
   salvarComissaoProdutoPreposto,
   salvarProduto,
+  excluirProduto,
   type PrepostoProduto,
   type ProdutoModulo,
   type RepresentadaProdutoFiltro,
@@ -55,6 +57,7 @@ export default function ProdutosPage() {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(formVazio());
   const [salvando, setSalvando] = useState(false);
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
   const [produtoComissoesId, setProdutoComissoesId] = useState<string | null>(null);
   const [prepostos, setPrepostos] = useState<PrepostoProduto[]>([]);
   const [comissoesDraft, setComissoesDraft] = useState<Record<string, { valor: string; especifica: boolean }>>({});
@@ -150,9 +153,26 @@ export default function ProdutosPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function removerProduto(produto: ProdutoModulo) {
+    if (modo !== "gestao" || salvando || excluindoId) return;
+    if (!window.confirm(`Excluir o produto "${produto.nome}"?\n\nEle será removido do cadastro. As vendas anteriores e seus valores serão preservados. Esta ação não pode ser desfeita. Para apenas suspender o uso, prefira inativar.`)) return;
+    setExcluindoId(produto.id);
+    setErro("");
+    setMensagem("");
+    try {
+      await excluirProduto(produto.id);
+      setProdutos((lista) => lista.filter((item) => item.id !== produto.id));
+      if (form.id === produto.id) { setForm(formVazio()); setMostrarForm(false); }
+      if (produtoComissoesId === produto.id) { setProdutoComissoesId(null); setComissoesDraft({}); }
+      setMensagem("Produto excluído com sucesso. As vendas anteriores foram preservadas.");
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível excluir o produto.");
+    } finally { setExcluindoId(null); }
+  }
+
   async function salvarCadastro(event: FormEvent) {
     event.preventDefault();
-    if (salvando) return;
+    if (salvando || excluindoId) return;
     if (!form.representadaId) {
       setErro("Selecione a representada do produto.");
       return;
@@ -434,6 +454,9 @@ export default function ProdutosPage() {
                 <div className={styles.actions}>
                   <button className="secondary" type="button" onClick={() => editarProduto(produto)}>
                     <Pencil size={14} /> Editar
+                  </button>
+                  <button className="secondary" type="button" disabled={salvando || Boolean(excluindoId)} onClick={() => void removerProduto(produto)} aria-label={`Excluir produto ${produto.nome}`}>
+                    <Trash2 size={14} /> {excluindoId === produto.id ? "Excluindo..." : "Excluir"}
                   </button>
                   <button className="secondary" type="button" onClick={() => void abrirComissoes(produto)}>
                     {produtoComissoesId === produto.id ? "Fechar comissões" : "Comissões dos prepostos"}
