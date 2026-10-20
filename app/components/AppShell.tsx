@@ -48,7 +48,7 @@ const operacionais = [
   { label: "Visitas", href: "/visitas", icon: ClipboardCheck, modulo: "visitas", enabled: true },
   { label: "Vendas", href: "/vendas", icon: ShoppingCart, modulo: "vendas", enabled: true },
   { label: "Comissões", href: "/comissoes", icon: BadgeDollarSign, modulo: "comissoes", enabled: true },
-  { label: "Agenda", href: "#", icon: CalendarDays, modulo: "agenda", enabled: false },
+  { label: "Agenda", href: "/agenda", icon: CalendarDays, modulo: "agenda", enabled: true },
   { label: "Relatórios", href: "#", icon: BarChart3, modulo: "relatorios", enabled: false },
 ];
 
