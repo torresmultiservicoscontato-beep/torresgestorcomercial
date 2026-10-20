@@ -1140,7 +1140,7 @@ export default function VisitasPage() {
                 <CalendarClock size={18} />
                 <div>
                   <strong>5. Próximas ações</strong>
-                  <span>Ao definir uma próxima ação e data, o compromisso entra automaticamente na Agenda. Para Retorno com frequência, a data é calculada a partir da visita.</span>
+                  <span>A próxima ação gera um compromisso adicional na Agenda e não altera a frequência fixa de visita cadastrada para o cliente.</span>
                 </div>
               </div>
 
@@ -1156,7 +1156,7 @@ export default function VisitasPage() {
                   </select>
                 </label>
                 <label className="field">
-                  Frequência
+                  Período da próxima ação
                   <select value={form.frequencia} onChange={(event) => setForm({ ...form, frequencia: event.target.value })}>
                     <option value="">Não definida</option>
                     <option>1 semana</option>
@@ -1169,6 +1169,15 @@ export default function VisitasPage() {
                   </select>
                 </label>
               </div>
+
+              {clienteSelecionado?.frequenciaVisita && (
+                <div className="representadaOption" style={{ marginBottom: 10, borderColor: "var(--blue)", background: "#edf4ff" }}>
+                  <span>
+                    <strong>Frequência fixa do cliente: {clienteSelecionado.frequenciaVisita}</strong>
+                    <small>Os eventos periódicos dos próximos 6 meses permanecem na Agenda mesmo que esta visita gere um retorno ou uma visita extraordinária.</small>
+                  </span>
+                </div>
+              )}
 
               <div className="two">
                 <label className="field">
