@@ -42,9 +42,11 @@ export default function PrimeiroAcessoPage() {
   useEffect(() => {
     if (!supabase) { router.replace("/login"); return; }
 
-    void supabase.auth.getUser().then(async ({ data, error }) => {
+    const clienteSupabase = supabase;
+
+    void clienteSupabase.auth.getUser().then(async ({ data, error }) => {
       if (error || !data.user) {
-        await supabase.auth.signOut();
+        await clienteSupabase.auth.signOut();
         router.replace("/login");
         return;
       }
