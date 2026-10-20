@@ -36,6 +36,7 @@ function formVazio() {
     nome: "",
     unidade: "",
     quantidadeMinima: "1",
+    precoVenda: "",
     ativo: true,
     comissaoPercentual: "",
   };
@@ -137,6 +138,7 @@ export default function ProdutosPage() {
       nome: produto.nome,
       unidade: produto.unidade,
       quantidadeMinima: String(produto.quantidadeMinima),
+      precoVenda: produto.precoVenda === null ? "" : String(produto.precoVenda),
       ativo: produto.ativo,
       comissaoPercentual: produto.comissaoRepresentantePercentual === null
         ? ""
@@ -168,6 +170,7 @@ export default function ProdutosPage() {
         nome: form.nome,
         unidade: form.unidade,
         quantidadeMinima: Number(form.quantidadeMinima.replace(",", ".")),
+        precoVenda: Number(form.precoVenda.replace(",", ".")),
         ativo: form.ativo,
         comissaoPercentual: form.comissaoPercentual === "" ? null : Number(form.comissaoPercentual),
       });
@@ -333,6 +336,10 @@ export default function ProdutosPage() {
               <input required type="number" min="0.001" max="999999999.999" step="0.001" value={form.quantidadeMinima} onChange={(event) => setForm({ ...form, quantidadeMinima: event.target.value })} />
               <small>Na unidade informada. Ex.: 1, 2, 3, 12 ou 100. Não define múltiplos de embalagem.</small>
             </label>
+                          <label className="field">
+                            Preço de venda por unidade (R$) *
+                            <input required type="number" min="0.01" max="999999999.99" step="0.01" value={form.precoVenda} onChange={(event) => setForm({ ...form, precoVenda: event.target.value })} />
+                          </label>
 
             <label className="field">
               Comissão específica do representante (%)
@@ -418,6 +425,7 @@ export default function ProdutosPage() {
                     {produto.codigo ? ` • Cód. ${produto.codigo}` : ""}
                     {produto.unidade ? ` • ${produto.unidade}` : ""}
                     {` • Mínimo: ${produto.quantidadeMinima.toLocaleString("pt-BR")} ${produto.unidade}` }
+                    {produto.precoVenda === null ? " • Preço não informado" : ` • ${produto.precoVenda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por unidade`}
                   </span>
                 </div>
               </div>

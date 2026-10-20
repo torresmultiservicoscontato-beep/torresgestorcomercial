@@ -138,6 +138,7 @@ export default function VisitasPage() {
     nome: "",
     unidade: "",
     quantidadeMinima: "1",
+    precoVenda: "",
     comissaoPercentual: "",
   });
 
@@ -366,7 +367,7 @@ export default function VisitasPage() {
                 quantidadeLotes: "",
                 tamanhoLote: produto.quantidadeMinima,
                 unidade: produto.unidade,
-                valorUnitario: "",
+                valorUnitario: produto.precoVenda === null ? "" : String(produto.precoVenda),
                 valorTotal: "",
                 codigo: produto.codigo,
                 representadaId: produto.representadaId,
@@ -392,6 +393,7 @@ export default function VisitasPage() {
       nome: "",
       unidade: "",
       quantidadeMinima: "1",
+    precoVenda: "",
       comissaoPercentual: "",
     });
     setMostrarCadastroProduto(true);
@@ -421,6 +423,7 @@ export default function VisitasPage() {
         nome: novoProdutoRapido.nome,
         unidade: novoProdutoRapido.unidade,
         quantidadeMinima: Number(novoProdutoRapido.quantidadeMinima.replace(",", ".")),
+        precoVenda: Number(novoProdutoRapido.precoVenda.replace(",", ".")),
         ativo: true,
         comissaoPercentual: novoProdutoRapido.comissaoPercentual === ""
           ? null
@@ -440,6 +443,7 @@ export default function VisitasPage() {
         nome: "",
         unidade: "",
       quantidadeMinima: "1",
+    precoVenda: "",
         comissaoPercentual: "",
       });
     } catch (falha) {
@@ -1019,6 +1023,10 @@ export default function VisitasPage() {
                             <input type="number" min="0.001" max="999999999.999" step="0.001" value={novoProdutoRapido.quantidadeMinima} onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, quantidadeMinima: event.target.value })} />
                             <small>Na unidade informada. Ex.: 1, 2, 12 ou 100.</small>
                           </label>
+                          <label className="field">
+                            Preço de venda por unidade (R$) *
+                            <input type="number" min="0.01" max="999999999.99" step="0.01" value={novoProdutoRapido.precoVenda} onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, precoVenda: event.target.value })} />
+                          </label>
 
                           <label className="field">
                             Comissão específica do representante (%)
@@ -1069,6 +1077,7 @@ export default function VisitasPage() {
                                   {produto.codigo ? ` • Cód. ${produto.codigo}` : ""}
                                   {produto.unidade ? ` • ${produto.unidade}` : ""}
                                   {` • Mínimo: ${produto.quantidadeMinima.toLocaleString("pt-BR")}`}
+                    {produto.precoVenda === null ? " • Preço não informado" : ` • ${produto.precoVenda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por unidade`}
                                 </small>
                               </span>
                             </label>

@@ -11,6 +11,7 @@ export type ProdutoModulo = {
   nome: string;
   unidade: string;
   quantidadeMinima: number;
+  precoVenda: number | null;
   ativo: boolean;
   comissaoRepresentantePercentual: number | null;
   comissaoPrepostoPercentual: number | null;
@@ -88,7 +89,7 @@ export async function carregarRepresentadasProdutos(): Promise<{
 export async function carregarProdutosModulo(representadaId?: string): Promise<ProdutoModulo[]> {
   const { cliente, titularUserId } = await contexto();
 
-  const { data, error } = await cliente.rpc("listar_produtos_modulo_v2", {
+  const { data, error } = await cliente.rpc("listar_produtos_modulo_v3", {
     p_titular_user_id: titularUserId,
     p_representada_id: representadaId || null,
   });
@@ -103,6 +104,7 @@ export async function carregarProdutosModulo(representadaId?: string): Promise<P
     nome: item.nome,
     unidade: item.unidade ?? "",
     quantidadeMinima: Number(item.quantidade_minima ?? 1),
+    precoVenda: item.preco_venda == null ? null : Number(item.preco_venda),
     ativo: Boolean(item.ativo),
     comissaoRepresentantePercentual: item.comissao_representante_percentual === null
       ? null
@@ -121,14 +123,16 @@ export async function salvarProduto(input: {
   nome: string;
   unidade: string;
   quantidadeMinima: number;
+  precoVenda: number;
   ativo: boolean;
   comissaoPercentual: number | null;
 }) {
   validarQuantidadeMinima(input.quantidadeMinima);
+  if (!Number.isFinite(input.precoVenda) || input.precoVenda <= 0 || input.precoVenda > 999999999.99 || Math.abs(input.precoVenda * 100 - Math.round(input.precoVenda * 100)) > 0.00001) throw new Error("Informe um preço de venda maior que zero, com até duas casas decimais.");
   const { cliente, titularUserId, acesso } = await contexto();
   if (acesso.papel === "preposto") throw new Error("Preposto não pode alterar produtos.");
 
-  const { data, error } = await cliente.rpc("salvar_produto_representada_v3", {
+  const { data, error } = await cliente.rpc("salvar_produto_representada_v4", {
     p_titular_user_id: titularUserId,
     p_representada_id: input.representadaId,
     p_id: input.id ?? null,
@@ -136,6 +140,7 @@ export async function salvarProduto(input: {
     p_nome: input.nome,
     p_unidade: input.unidade,
     p_quantidade_minima: input.quantidadeMinima,
+    p_preco_venda: input.precoVenda,
     p_ativo: input.ativo,
     p_comissao_percentual: input.comissaoPercentual,
   });
