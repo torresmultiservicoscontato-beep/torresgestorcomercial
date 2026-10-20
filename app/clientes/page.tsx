@@ -403,7 +403,7 @@ export default function ClientesPage() {
               <MapPinned size={18} />
               <div>
                 <strong>Rota padrão do cliente</strong>
-                <span>O vínculo será usado no mapa da rota e, mais adiante, na Agenda.</span>
+                <span>O vínculo é usado no mapa da rota e na organização da Agenda.</span>
               </div>
             </div>
 
@@ -479,7 +479,7 @@ export default function ClientesPage() {
 
       <div className="search">
         <Search size={19} />
-        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por cliente, endereço, rota, telefone, representada ou responsável..." />
+        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por cliente, endereço, frequência, rota, telefone, representada ou responsável..." />
       </div>
 
       <section className="panel">
