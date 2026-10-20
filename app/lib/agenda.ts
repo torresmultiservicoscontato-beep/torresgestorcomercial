@@ -13,6 +13,16 @@ export type ResponsavelAgenda = {
   tipo: "representante" | "preposto";
 };
 
+export type ClienteAgenda = {
+  id: string;
+  nome: string;
+};
+
+export type RepresentadaAgenda = {
+  id: string;
+  nome: string;
+};
+
 export type EventoAgenda = {
   id: string;
   responsavelUserId: string;
@@ -81,16 +91,27 @@ export async function carregarAgenda(): Promise<{
   contexto: ContextoAgenda;
   eventos: EventoAgenda[];
   responsaveis: ResponsavelAgenda[];
+  clientes: ClienteAgenda[];
+  representadas: RepresentadaAgenda[];
 }> {
   const ctx = await contexto();
 
-  const [{ data: eventos, error: eventosError }, { data: responsaveis, error: responsaveisError }] = await Promise.all([
+  const [
+    { data: eventos, error: eventosError },
+    { data: responsaveis, error: responsaveisError },
+    { data: clientes, error: clientesError },
+    { data: representadas, error: representadasError },
+  ] = await Promise.all([
     ctx.cliente.rpc("listar_agenda_eventos", { p_titular_user_id: ctx.titularUserId }),
     ctx.cliente.rpc("listar_responsaveis_agenda", { p_titular_user_id: ctx.titularUserId }),
+    ctx.cliente.rpc("listar_clientes_agenda", { p_titular_user_id: ctx.titularUserId }),
+    ctx.cliente.rpc("listar_representadas_agenda", { p_titular_user_id: ctx.titularUserId }),
   ]);
 
   if (eventosError) throw new Error(`Falha ao carregar agenda: ${eventosError.message}`);
   if (responsaveisError) throw new Error(`Falha ao carregar responsáveis: ${responsaveisError.message}`);
+  if (clientesError) throw new Error(`Falha ao carregar clientes da agenda: ${clientesError.message}`);
+  if (representadasError) throw new Error(`Falha ao carregar representadas da agenda: ${representadasError.message}`);
 
   return {
     contexto: {
@@ -125,6 +146,14 @@ export async function carregarAgenda(): Promise<{
       userId: item.user_id,
       nome: item.nome,
       tipo: item.tipo === "preposto" ? "preposto" : "representante",
+    })),
+    clientes: (clientes ?? []).map((item: any) => ({
+      id: item.cliente_id,
+      nome: item.nome,
+    })),
+    representadas: (representadas ?? []).map((item: any) => ({
+      id: item.representada_id,
+      nome: item.nome,
     })),
   };
 }
