@@ -33,7 +33,7 @@ export type EventoAgenda = {
   representadaIds: string[];
   representadaNomes: string[];
   visitaId: string | null;
-  origem: "manual" | "visita";
+  origem: "manual" | "visita" | "frequencia";
   tipo: TipoAgenda;
   titulo: string;
   data: string;
@@ -43,6 +43,10 @@ export type EventoAgenda = {
   observacao: string;
   concluidoEm: string | null;
   criadoEm: string;
+  serieId: string | null;
+  frequenciaCliente: string;
+  ultimaVisita: string | null;
+  proximaVisitaPrevista: string | null;
 };
 
 export type ContextoAgenda = {
@@ -131,7 +135,7 @@ export async function carregarAgenda(): Promise<{
       representadaIds: item.representada_ids ?? [],
       representadaNomes: item.representada_nomes ?? [],
       visitaId: item.visita_id,
-      origem: item.origem === "visita" ? "visita" : "manual",
+      origem: item.origem === "visita" ? "visita" : item.origem === "frequencia" ? "frequencia" : "manual",
       tipo: item.tipo as TipoAgenda,
       titulo: item.titulo,
       data: item.data,
@@ -141,6 +145,10 @@ export async function carregarAgenda(): Promise<{
       observacao: item.observacao ?? "",
       concluidoEm: item.concluido_em,
       criadoEm: item.created_at,
+      serieId: item.serie_id ?? null,
+      frequenciaCliente: item.frequencia_cliente ?? "",
+      ultimaVisita: item.ultima_visita ?? null,
+      proximaVisitaPrevista: item.proxima_visita_prevista ?? null,
     })),
     responsaveis: (responsaveis ?? []).map((item: any) => ({
       userId: item.user_id,
@@ -204,4 +212,18 @@ export async function atualizarStatusAgenda(eventoId: string, status: StatusAgen
   });
 
   if (error) throw new Error(`Falha ao atualizar atividade: ${error.message}`);
+}
+
+
+export async function cancelarFuturosFrequenciaAgenda(eventoId: string) {
+  const ctx = await contexto();
+  if (!ctx.podeEditar) throw new Error("Você não possui permissão para alterar a Agenda.");
+
+  const { data, error } = await ctx.cliente.rpc("cancelar_futuros_frequencia_agenda", {
+    p_titular_user_id: ctx.titularUserId,
+    p_evento_id: eventoId,
+  });
+
+  if (error) throw new Error(`Falha ao cancelar a programação futura: ${error.message}`);
+  return Number(data ?? 0);
 }
