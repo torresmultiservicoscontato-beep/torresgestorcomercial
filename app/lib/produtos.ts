@@ -1,3 +1,4 @@
+import { validarQuantidadeMinima } from "./produtoQuantidade";
 import { carregarAcessoAtual } from "./acesso";
 import { obterRepresentanteAdministrado } from "./adminContext";
 import { supabase } from "./supabase";
@@ -9,6 +10,7 @@ export type ProdutoModulo = {
   codigo: string;
   nome: string;
   unidade: string;
+  quantidadeMinima: number;
   ativo: boolean;
   comissaoRepresentantePercentual: number | null;
   comissaoPrepostoPercentual: number | null;
@@ -86,7 +88,7 @@ export async function carregarRepresentadasProdutos(): Promise<{
 export async function carregarProdutosModulo(representadaId?: string): Promise<ProdutoModulo[]> {
   const { cliente, titularUserId } = await contexto();
 
-  const { data, error } = await cliente.rpc("listar_produtos_modulo", {
+  const { data, error } = await cliente.rpc("listar_produtos_modulo_v2", {
     p_titular_user_id: titularUserId,
     p_representada_id: representadaId || null,
   });
@@ -100,6 +102,7 @@ export async function carregarProdutosModulo(representadaId?: string): Promise<P
     codigo: item.codigo ?? "",
     nome: item.nome,
     unidade: item.unidade ?? "",
+    quantidadeMinima: Number(item.quantidade_minima ?? 1),
     ativo: Boolean(item.ativo),
     comissaoRepresentantePercentual: item.comissao_representante_percentual === null
       ? null
@@ -117,19 +120,22 @@ export async function salvarProduto(input: {
   codigo: string;
   nome: string;
   unidade: string;
+  quantidadeMinima: number;
   ativo: boolean;
   comissaoPercentual: number | null;
 }) {
+  validarQuantidadeMinima(input.quantidadeMinima);
   const { cliente, titularUserId, acesso } = await contexto();
   if (acesso.papel === "preposto") throw new Error("Preposto não pode alterar produtos.");
 
-  const { data, error } = await cliente.rpc("salvar_produto_representada_v2", {
+  const { data, error } = await cliente.rpc("salvar_produto_representada_v3", {
     p_titular_user_id: titularUserId,
     p_representada_id: input.representadaId,
     p_id: input.id ?? null,
     p_codigo: input.codigo,
     p_nome: input.nome,
     p_unidade: input.unidade,
+    p_quantidade_minima: input.quantidadeMinima,
     p_ativo: input.ativo,
     p_comissao_percentual: input.comissaoPercentual,
   });

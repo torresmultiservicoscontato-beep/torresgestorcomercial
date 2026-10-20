@@ -135,6 +135,7 @@ export default function VisitasPage() {
     codigo: "",
     nome: "",
     unidade: "",
+    quantidadeMinima: "1",
     comissaoPercentual: "",
   });
 
@@ -386,6 +387,7 @@ export default function VisitasPage() {
       codigo: "",
       nome: "",
       unidade: "",
+      quantidadeMinima: "1",
       comissaoPercentual: "",
     });
     setMostrarCadastroProduto(true);
@@ -414,6 +416,7 @@ export default function VisitasPage() {
         codigo: novoProdutoRapido.codigo,
         nome: novoProdutoRapido.nome,
         unidade: novoProdutoRapido.unidade,
+        quantidadeMinima: Number(novoProdutoRapido.quantidadeMinima.replace(",", ".")),
         ativo: true,
         comissaoPercentual: novoProdutoRapido.comissaoPercentual === ""
           ? null
@@ -432,6 +435,7 @@ export default function VisitasPage() {
         codigo: "",
         nome: "",
         unidade: "",
+      quantidadeMinima: "1",
         comissaoPercentual: "",
       });
     } catch (falha) {
@@ -999,6 +1003,12 @@ export default function VisitasPage() {
                           </label>
 
                           <label className="field">
+                            Quantidade mínima *
+                            <input type="number" min="0.001" max="999999999.999" step="0.001" value={novoProdutoRapido.quantidadeMinima} onChange={(event) => setNovoProdutoRapido({ ...novoProdutoRapido, quantidadeMinima: event.target.value })} />
+                            <small>Na unidade informada. Ex.: 1, 2, 12 ou 100.</small>
+                          </label>
+
+                          <label className="field">
                             Comissão específica do representante (%)
                             <input
                               type="number"
@@ -1046,6 +1056,7 @@ export default function VisitasPage() {
                                   {produto.representadaNome}
                                   {produto.codigo ? ` • Cód. ${produto.codigo}` : ""}
                                   {produto.unidade ? ` • ${produto.unidade}` : ""}
+                                  {` • Mínimo: ${produto.quantidadeMinima.toLocaleString("pt-BR")}`}
                                 </small>
                               </span>
                             </label>
