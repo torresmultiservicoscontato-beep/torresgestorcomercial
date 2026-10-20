@@ -13,6 +13,8 @@ export type ClienteDetalhado = Cliente & {
   rotaOrdem: number | null;
   latitude: number | null;
   longitude: number | null;
+  ultimaVisita: string | null;
+  proximaVisitaPrevista: string | null;
 };
 
 type ClienteDetalheRow = {
@@ -75,13 +77,54 @@ export async function carregarClientesDetalhados(): Promise<ClienteDetalhado[]> 
   if (base.length === 0) return [];
 
   const cliente = exigirSupabase();
-  const { data, error } = await cliente
-    .from("clientes")
-    .select("id,logradouro,numero,complemento,cep,rota_id,rota_ordem,latitude,longitude")
-    .in("id", base.map((item) => item.id));
+  const ids = base.map((item) => item.id);
+  const hoje = (() => {
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = String(agora.getMonth() + 1).padStart(2, "0");
+    const dia = String(agora.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  })();
+
+  const [
+    { data, error },
+    { data: visitas, error: visitasError },
+    { data: agenda, error: agendaError },
+  ] = await Promise.all([
+    cliente
+      .from("clientes")
+      .select("id,logradouro,numero,complemento,cep,rota_id,rota_ordem,latitude,longitude")
+      .in("id", ids),
+    cliente
+      .from("visitas")
+      .select("cliente_id,data")
+      .in("cliente_id", ids)
+      .order("data", { ascending: false }),
+    cliente
+      .from("agenda_eventos")
+      .select("cliente_id,data")
+      .in("cliente_id", ids)
+      .eq("origem", "frequencia")
+      .eq("status", "Pendente")
+      .gte("data", hoje)
+      .order("data", { ascending: true }),
+  ]);
 
   if (error) throw new Error(`Falha ao carregar endereço e rota dos clientes: ${error.message}`);
+  if (visitasError) throw new Error(`Falha ao carregar histórico de visitas dos clientes: ${visitasError.message}`);
+  if (agendaError) throw new Error(`Falha ao carregar próximas visitas dos clientes: ${agendaError.message}`);
+
   const detalhes = new Map(((data ?? []) as ClienteDetalheRow[]).map((row) => [row.id, row]));
+  const ultimaVisita = new Map<string, string>();
+  const proximaVisita = new Map<string, string>();
+
+  for (const visita of visitas ?? []) {
+    if (!ultimaVisita.has(visita.cliente_id)) ultimaVisita.set(visita.cliente_id, visita.data);
+  }
+
+  for (const evento of agenda ?? []) {
+    if (!proximaVisita.has(evento.cliente_id)) proximaVisita.set(evento.cliente_id, evento.data);
+  }
 
   return base.map((item) => {
     const detalhe = detalhes.get(item.id);
@@ -95,6 +138,8 @@ export async function carregarClientesDetalhados(): Promise<ClienteDetalhado[]> 
       rotaOrdem: detalhe?.rota_ordem === null || detalhe?.rota_ordem === undefined ? null : Number(detalhe.rota_ordem),
       latitude: detalhe?.latitude === null || detalhe?.latitude === undefined ? null : Number(detalhe.latitude),
       longitude: detalhe?.longitude === null || detalhe?.longitude === undefined ? null : Number(detalhe.longitude),
+      ultimaVisita: ultimaVisita.get(item.id) ?? null,
+      proximaVisitaPrevista: proximaVisita.get(item.id) ?? null,
     };
   });
 }
@@ -117,6 +162,7 @@ async function salvar(clienteParaSalvar: ClienteDetalhado, acao: "cadastrar" | "
     p_status: clienteParaSalvar.status,
     p_rota_id: clienteParaSalvar.rotaId,
     p_representadas: clienteParaSalvar.representadas.map((item: RepresentadaOperacional) => item.id),
+    p_frequencia_visita: clienteParaSalvar.frequenciaVisita,
   });
 
   if (error) throw new Error(`${acao === "cadastrar" ? "Falha ao salvar" : "Falha ao atualizar"} cliente: ${error.message}`);
