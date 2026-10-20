@@ -19,7 +19,7 @@ Para corrigir, use **Editar**. Para pagar uma despesa pendente, use **Registrar 
 
 A migração `20261020222906_despesas_operacionais.sql` cria a tabela, índices, políticas e validação privada de vínculos. Acrescenta permissões de despesas aos vínculos que ainda não possuem essa configuração, preservando regras explícitas existentes. A migração já foi aplicada ao projeto Torres Gestor Comercial em 20/10/2026. Não reaplicar manualmente nesse projeto.
 
-O menu de relatórios permanece como etapa seguinte. Os dados de despesas ficam disponíveis para cruzamento por operação, responsável, data, categoria e rota. Recorrência automática, reembolso, anexos e rateio não fazem parte deste módulo.
+O menu Relatórios inclui a consulta de despesas por período, responsável, cliente/descrição e rota, com CSV e impressão. O módulo Despesas mantém os filtros detalhados por categoria. Recorrência automática, reembolso, anexos e rateio não fazem parte deste módulo.
 
 ## Validação
 

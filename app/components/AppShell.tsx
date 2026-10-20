@@ -51,7 +51,7 @@ const operacionais = [
   { label: "Comissões", href: "/comissoes", icon: BadgeDollarSign, modulo: "comissoes", enabled: true },
   { label: "Despesas", href: "/despesas", icon: Wallet, modulo: "despesas", enabled: true },
   { label: "Agenda", href: "/agenda", icon: CalendarDays, modulo: "agenda", enabled: true },
-  { label: "Relatórios", href: "#", icon: BarChart3, modulo: "relatorios", enabled: false },
+  { label: "Relatórios", href: "/relatorios", icon: BarChart3, modulo: "relatorios", enabled: true },
 ];
 
 function redirecionar(destino: string) {
