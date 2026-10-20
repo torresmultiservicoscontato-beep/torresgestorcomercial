@@ -17,6 +17,8 @@ export type Cliente = {
   representadas: RepresentadaOperacional[];
   telefone: string;
   status: string;
+  frequenciaVisita: string;
+  frequenciaDataBase?: string | null;
   responsavelUserId?: string;
   responsavelNome?: string;
   responsavelTipo?: "titular" | "preposto";
@@ -42,6 +44,8 @@ type ClienteRow = {
   representada_id: string | null;
   telefone: string;
   status: string;
+  frequencia_visita: string | null;
+  frequencia_data_base: string | null;
   responsavel_user_id: string | null;
 };
 
@@ -235,6 +239,8 @@ async function mapearClientes(
       representadas,
       telefone: row.telefone,
       status: row.status,
+      frequenciaVisita: row.frequencia_visita ?? "",
+      frequenciaDataBase: row.frequencia_data_base ?? null,
       responsavelUserId,
       responsavelTipo: titular ? "titular" : "preposto",
       responsavelNome: titular
@@ -264,7 +270,7 @@ export async function carregarClientes(): Promise<Cliente[]> {
 
   let consulta = cliente
     .from("clientes")
-    .select("id,nome,cidade,bairro,representada,representada_id,telefone,status,responsavel_user_id")
+    .select("id,nome,cidade,bairro,representada,representada_id,telefone,status,frequencia_visita,frequencia_data_base,responsavel_user_id")
     .eq("user_id", userIdAlvo);
 
   if (filtroResponsavelUserId) consulta = consulta.eq("responsavel_user_id", filtroResponsavelUserId);
