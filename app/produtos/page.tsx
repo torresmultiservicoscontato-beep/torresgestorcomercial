@@ -35,6 +35,7 @@ function formVazio() {
     codigo: "",
     nome: "",
     unidade: "",
+    quantidadeMinima: "1",
     ativo: true,
     comissaoPercentual: "",
   };
@@ -135,6 +136,7 @@ export default function ProdutosPage() {
       codigo: produto.codigo,
       nome: produto.nome,
       unidade: produto.unidade,
+      quantidadeMinima: String(produto.quantidadeMinima),
       ativo: produto.ativo,
       comissaoPercentual: produto.comissaoRepresentantePercentual === null
         ? ""
@@ -165,6 +167,7 @@ export default function ProdutosPage() {
         codigo: form.codigo,
         nome: form.nome,
         unidade: form.unidade,
+        quantidadeMinima: Number(form.quantidadeMinima.replace(",", ".")),
         ativo: form.ativo,
         comissaoPercentual: form.comissaoPercentual === "" ? null : Number(form.comissaoPercentual),
       });
@@ -326,6 +329,12 @@ export default function ProdutosPage() {
             </label>
 
             <label className="field">
+              Quantidade mínima *
+              <input required type="number" min="0.001" max="999999999.999" step="0.001" value={form.quantidadeMinima} onChange={(event) => setForm({ ...form, quantidadeMinima: event.target.value })} />
+              <small>Na unidade informada. Ex.: 1, 2, 3, 12 ou 100. Não define múltiplos de embalagem.</small>
+            </label>
+
+            <label className="field">
               Comissão específica do representante (%)
               <input
                 type="number"
@@ -408,6 +417,7 @@ export default function ProdutosPage() {
                     {produto.representadaNome}
                     {produto.codigo ? ` • Cód. ${produto.codigo}` : ""}
                     {produto.unidade ? ` • ${produto.unidade}` : ""}
+                    {` • Mínimo: ${produto.quantidadeMinima.toLocaleString("pt-BR")} ${produto.unidade}` }
                   </span>
                 </div>
               </div>

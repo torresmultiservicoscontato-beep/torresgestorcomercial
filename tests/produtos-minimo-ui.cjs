@@ -1,0 +1,41 @@
+const {chromium}=require('playwright');const assert=require('node:assert/strict');
+const fs=require('node:fs');const userId='11111111-1111-4111-8111-111111111111';
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const context=await browser.newContext({viewport:{width:1366,height:1000}});
+ const user={id:userId,email:'teste@example.test',user_metadata:{},app_metadata:{},aud:'authenticated',role:'authenticated'};
+ const token=[Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),Buffer.from(JSON.stringify({sub:userId,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),'mock'].join('.');
+ await context.addInitScript(({token,user})=>localStorage.setItem('sb-sqlrhvxiluzgeldxcmyf-auth-token',JSON.stringify({access_token:token,refresh_token:'mock',expires_at:Math.floor(Date.now()/1000)+3600,user})),{token,user});
+ let produtos=[],writes=0;
+ await context.route('https://*.supabase.co/**',async route=>{
+  const req=route.request(),p=new URL(req.url()).pathname;let body;
+  if(p==='/auth/v1/user')body=user;
+  else if(p.endsWith('/perfis'))body={user_id:userId,nome:'Teste',nome_representacao:'Operação teste',papel:'usuario'};
+  else if(p.endsWith('/perfil_representadas'))body=[];
+  else if(p.endsWith('/rpc/listar_representadas_modulo'))body=[{representada_id:'rep1',nome:'Representada teste',comissao_percentual:4}];
+  else if(p.endsWith('/rpc/listar_produtos_modulo_v2'))body=produtos;
+  else if(p.endsWith('/rpc/salvar_produto_representada_v3')){
+   const d=req.postDataJSON();writes++;assert.ok(d.p_quantidade_minima>0);body=d.p_id||'produto1';
+   const item={produto_id:body,representada_id:'rep1',representada_nome:'Representada teste',codigo:d.p_codigo,nome:d.p_nome,unidade:d.p_unidade,ativo:true,quantidade_minima:d.p_quantidade_minima,comissao_representante_percentual:null,comissao_preposto_percentual:null};
+   produtos=[...produtos.filter(x=>x.produto_id!==body),item];
+  }else throw Error('Consulta inesperada '+p);
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+ });
+ const page=await context.newPage();await page.goto('http://localhost:3100/produtos');
+ await page.getByRole('button',{name:'Novo produto',exact:true}).click();
+ const form=page.locator('form');
+ assert.equal(await form.getByLabel(/^Quantidade mínima/).inputValue(),'1');
+ await form.getByLabel('Produto *',{exact:true}).fill('Parafuso teste');await form.getByLabel('Unidade',{exact:true}).fill('UN');
+ await form.getByLabel(/^Quantidade mínima/).fill('0');
+ await form.locator('button[type=submit]').click();assert.equal(writes,0);
+ await form.getByLabel(/^Quantidade mínima/).fill('12');
+ await form.locator('button[type=submit]').click();
+ await page.getByText('Produto salvo com sucesso.',{exact:true}).waitFor();assert.equal(produtos[0].quantidade_minima,12);assert.equal(produtos[0].unidade,'UN');
+ await page.getByRole('button',{name:'Editar',exact:true}).click();
+ assert.equal(await form.getByLabel(/^Quantidade mínima/).inputValue(),'12');
+ await form.getByLabel(/^Quantidade mínima/).fill('100');
+ await page.setViewportSize({width:390,height:844});fs.mkdirSync('/tmp/torres-produtos-qa',{recursive:true});await page.screenshot({path:'/tmp/torres-produtos-qa/minimo.png',fullPage:true});
+ await form.locator('button[type=submit]').click();await page.getByText('Produto salvo com sucesso.',{exact:true}).waitFor();assert.equal(produtos[0].quantidade_minima,100);
+ await page.reload();await page.getByText(/Mínimo: 100/).waitFor();assert.equal(writes,2);
+ await browser.close();console.log('OK: cadastro, mínimo obrigatório positivo, edição, unidade preservada e recarga com mínimo salvo. API simulada.');
+})().catch(e=>{console.error(e);process.exit(1)});
