@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Paperclip, Pencil, PhoneCall, Plus, X } from "lucide-react";
+import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Paperclip, Pencil, PhoneCall, Plus, Trash2, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../lib/data";
 import {
   atualizarVisitaDetalhada,
+  excluirVisitaDetalhada,
   carregarVisitasDetalhadas,
   criarVisitaDetalhada,
   type TipoContato,
@@ -121,6 +122,8 @@ export default function VisitasPage() {
   const [representadasOperacionais, setRepresentadasOperacionais] = useState<RepresentadaOperacional[]>([]);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [form, setForm] = useState(formInicial());
@@ -488,9 +491,28 @@ export default function VisitasPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function excluirVisita(visita: VisitaDetalhada) {
+    if (!podeEditar || excluindoId || salvando) return;
+    const mensagem = `Excluir a visita de ${visita.clienteNome} em ${visita.data.split("-").reverse().join("/")}?\n\nA venda, seus itens e os compromissos vinculados a esta visita também serão excluídos. Esta ação não pode ser desfeita.`;
+    if (!window.confirm(mensagem)) return;
+    setExcluindoId(visita.id);
+    setErro("");
+    setSucesso("");
+    try {
+      await excluirVisitaDetalhada(visita.id);
+      setVisitas((lista) => lista.filter((item) => item.id !== visita.id));
+      if (editandoId === visita.id) cancelarEdicao();
+      setSucesso("Visita excluída com sucesso.");
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível excluir a visita.");
+    } finally {
+      setExcluindoId(null);
+    }
+  }
+
   async function registrarVisita(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (salvando) return;
+    if (salvando || excluindoId) return;
 
     const cliente = clientes.find((item) => item.id === form.clienteId);
     if (!cliente) {
@@ -1289,7 +1311,7 @@ export default function VisitasPage() {
               </label>
             </div>
 
-            <button className="primary wide" type="submit" disabled={salvando || carregando || clientes.length === 0}>
+            <button className="primary wide" type="submit" disabled={salvando || Boolean(excluindoId) || carregando || clientes.length === 0}>
               <ClipboardCheck size={18} /> {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Registrar visita"}
             </button>
           </form>
@@ -1303,6 +1325,7 @@ export default function VisitasPage() {
             </div>
           </div>
 
+          {sucesso && <p role="status">{sucesso}</p>}
           <div className="visitHistory">
             {!carregando && visitasOrdenadas.map((visita) => (
               <article className="visitItem" key={visita.id}>
@@ -1322,9 +1345,15 @@ export default function VisitasPage() {
                 <div className="visitItemActions">
                   <span className="tag">{visita.resultado}</span>
                   {podeEditar && (
-                    <button className="iconBtn editDataButton" type="button" onClick={() => editar(visita)} title="Editar visita">
-                      <Pencil size={14} />
-                    </button>
+                    <>
+                      <button className="iconBtn editDataButton" type="button" disabled={salvando || Boolean(excluindoId)} onClick={() => editar(visita)} title="Editar visita">
+                        <Pencil size={14} />
+                      </button>
+                      <button className="iconBtn" type="button" disabled={salvando || Boolean(excluindoId)} onClick={() => excluirVisita(visita)} title="Excluir visita" aria-label={`Excluir visita de ${visita.clienteNome}`}>
+                        <Trash2 size={16} />
+                        {excluindoId === visita.id && <span>Excluindo...</span>}
+                      </button>
+                    </>
                   )}
                 </div>
 
