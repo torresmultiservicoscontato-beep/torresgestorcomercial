@@ -37,9 +37,11 @@ export default function LoginPage() {
   useEffect(() => {
     if (!supabase) return;
 
-    void supabase.auth.getUser().then(async ({ data, error }) => {
+    const clienteSupabase = supabase;
+
+    void clienteSupabase.auth.getUser().then(async ({ data, error }) => {
       if (error || !data.user) {
-        await supabase.auth.signOut();
+        await clienteSupabase.auth.signOut();
         return;
       }
       redirecionar(await destinoUsuarioLogado());
