@@ -1140,7 +1140,7 @@ export default function VisitasPage() {
                 <CalendarClock size={18} />
                 <div>
                   <strong>5. Próximas ações</strong>
-                  <span>Ao escolher Retorno e uma frequência, a próxima data é calculada automaticamente a partir da data da visita.</span>
+                  <span>Ao definir uma próxima ação e data, o compromisso entra automaticamente na Agenda. Para Retorno com frequência, a data é calculada a partir da visita.</span>
                 </div>
               </div>
 
