@@ -71,13 +71,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
       return;
     }
 
+    const clienteSupabase = supabase;
     let ativo = true;
 
     async function autenticar() {
       const {
         data: { user },
         error,
-      } = await supabase.auth.getUser();
+      } = await clienteSupabase.auth.getUser();
 
       if (!ativo) return;
       if (error || !user) {
