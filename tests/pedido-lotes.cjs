@@ -20,3 +20,15 @@ assert.deepEqual(salvar(antigo), antigo);
 assert.deepEqual(salvar(salvar(dois)), salvar(dois));
 assert.equal(atualizar(dois, 'quantidadeLotes', '').valorTotal, '');
 console.log('OK: lotes 88×2/×3, preço por unidade, lote 1/fracionário, entradas inválidas e pedido salvo sem dupla multiplicação.');
+
+const { totalProdutosPedido: total } = modulo.exports;
+assert.equal(total([salvar(dois), { produto: 'Outro', valorTotal: '12,90' }]), 1860.9);
+assert.equal(total([{ produto: 'A', valorTotal: '0.10' }, { produto: 'B', valorTotal: '0.20' }]), 0.3);
+assert.equal(total([]), 0);
+assert.equal(total([salvar(dois)]), 1848);
+assert.equal(total([{ produto: 'Incompleto', quantidade: '88' }]), null);
+assert.equal(total([{ produto: 'Antigo', quantidade: '176', valorUnitario: '10.50' }]), 1848);
+assert.equal(total([{ produto: 'Inválido', valorTotal: '-10' }]), null);
+console.log('OK: soma de vários produtos, centavos, remoção, item incompleto e quantidade total salva.');
+assert.equal(total([atualizar({ ...antigo, valorUnitario: '10.50' }, 'quantidade', '264')]), 2772);
+assert.equal(total([atualizar({ ...antigo, valorUnitario: '10.50' }, 'valorUnitario', '2')]), 352);
