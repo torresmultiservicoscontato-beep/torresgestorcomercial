@@ -3,7 +3,7 @@ import { carregarPerfilAtual } from "./perfil";
 import { supabase } from "./supabase";
 
 export type AcaoPermissao = "visualizar" | "cadastrar" | "editar";
-export type ModuloPermissao = "clientes" | "rotas" | "visitas" | "vendas" | "agenda" | "relatorios";
+export type ModuloPermissao = "clientes" | "rotas" | "visitas" | "vendas" | "agenda" | "despesas" | "relatorios";
 export type PermissoesPreposto = Record<ModuloPermissao, Record<AcaoPermissao, boolean>>;
 export type StatusVinculoPreposto = "pendente" | "ativo" | "inativo" | "recusado";
 
@@ -69,6 +69,7 @@ export const permissoesPadrao: PermissoesPreposto = {
   visitas: { visualizar: true, cadastrar: true, editar: true },
   vendas: { visualizar: true, cadastrar: true, editar: true },
   agenda: { visualizar: true, cadastrar: true, editar: true },
+  despesas: { visualizar: true, cadastrar: true, editar: true },
   relatorios: { visualizar: true, cadastrar: false, editar: false },
 };
 

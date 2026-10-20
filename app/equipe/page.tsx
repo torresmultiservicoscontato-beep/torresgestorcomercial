@@ -25,6 +25,7 @@ const modulos: { id: ModuloPermissao; label: string }[] = [
   { id: "visitas", label: "Visitas" },
   { id: "vendas", label: "Vendas" },
   { id: "agenda", label: "Agenda" },
+  { id: "despesas", label: "Despesas" },
   { id: "relatorios", label: "Relatórios" },
 ];
 
@@ -332,7 +333,7 @@ export default function EquipePage() {
                       <td><strong>{modulo.label}</strong></td>
                       {acoes.map((acao) => (
                         <td key={acao.id}>
-                          <input type="checkbox" checked={form.permissoes[modulo.id][acao.id]} onChange={(event) => alterarPermissao(modulo.id, acao.id, event.target.checked)} />
+                          <input type="checkbox" checked={Boolean(form.permissoes[modulo.id]?.[acao.id])} onChange={(event) => alterarPermissao(modulo.id, acao.id, event.target.checked)} />
                         </td>
                       ))}
                     </tr>
