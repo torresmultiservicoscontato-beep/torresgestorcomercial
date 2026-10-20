@@ -20,6 +20,7 @@ import {
 import AppShell from "../components/AppShell";
 import {
   atualizarStatusAgenda,
+  cancelarFuturosFrequenciaAgenda,
   carregarAgenda,
   salvarEventoAgenda,
   type ClienteAgenda,
@@ -407,6 +408,30 @@ export default function AgendaPage() {
     }
   }
 
+  async function cancelarEsteEFuturos(evento: EventoAgenda) {
+    const confirmar = window.confirm(
+      "Cancelar este compromisso e todos os próximos eventos desta frequência? O histórico anterior será preservado.",
+    );
+    if (!confirmar) return;
+
+    setErro("");
+    setMensagem("");
+
+    try {
+      const quantidade = await cancelarFuturosFrequenciaAgenda(evento.id);
+      await recarregar();
+      setMensagem(`${quantidade} compromisso(s) futuro(s) da frequência foram cancelados.`);
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível cancelar os eventos futuros.");
+    }
+  }
+
+  function rotuloOrigem(evento: EventoAgenda) {
+    if (evento.origem === "visita") return "Próxima ação";
+    if (evento.origem === "frequencia") return "Frequência do cliente";
+    return "Manual";
+  }
+
   function renderEvento(evento: EventoAgenda, compacto = false) {
     const atrasado = evento.status === "Pendente" && evento.data < hojeLocal();
 
@@ -435,7 +460,7 @@ export default function AgendaPage() {
           <div className={styles.eventInfo}>
             <div className={styles.eventTitleLine}>
               <strong>{evento.titulo}</strong>
-              <span className={styles.origin}>{evento.origem === "visita" ? "Visita" : "Manual"}</span>
+              <span className={styles.origin}>{rotuloOrigem(evento)}</span>
             </div>
             <span>
               {evento.clienteNome}
@@ -455,8 +480,17 @@ export default function AgendaPage() {
               <div><span>Data</span><strong>{dataBr(evento.data)}</strong></div>
               <div><span>Tipo</span><strong>{evento.tipo}</strong></div>
               <div><span>Responsável</span><strong>{evento.responsavelNome}</strong></div>
-              <div><span>Origem</span><strong>{evento.origem === "visita" ? "Próxima ação de visita" : "Cadastro manual"}</strong></div>
+              <div><span>Origem</span><strong>{rotuloOrigem(evento)}</strong></div>
             </div>
+
+            {evento.origem === "frequencia" && (
+              <div className={styles.detailGrid} style={{ marginTop: 8 }}>
+                <div><span>Frequência</span><strong>{evento.frequenciaCliente || "—"}</strong></div>
+                <div><span>Última visita</span><strong>{evento.ultimaVisita ? dataBr(evento.ultimaVisita) : "Ainda não registrada"}</strong></div>
+                <div><span>Próxima periódica ativa</span><strong>{evento.proximaVisitaPrevista ? dataBr(evento.proximaVisitaPrevista) : "Sem próxima ativa"}</strong></div>
+                <div><span>Regra</span><strong>Calendário fixo</strong></div>
+              </div>
+            )}
 
             {evento.observacao && <p>{evento.observacao}</p>}
 
@@ -476,8 +510,13 @@ export default function AgendaPage() {
                     <CheckCircle2 size={14} /> Concluir
                   </button>
                   <button className="secondary" type="button" onClick={() => void alterarStatus(evento, "Cancelado")}>
-                    <XCircle size={14} /> Cancelar
+                    <XCircle size={14} /> {evento.origem === "frequencia" ? "Cancelar este evento" : "Cancelar"}
                   </button>
+                  {evento.origem === "frequencia" && (
+                    <button className="secondary" type="button" onClick={() => void cancelarEsteEFuturos(evento)}>
+                      <XCircle size={14} /> Cancelar este e próximos
+                    </button>
+                  )}
                 </>
               )}
 
