@@ -20,6 +20,8 @@ import {
 import { carregarProdutosModulo, salvarProduto, type ProdutoModulo } from "../lib/produtos";
 import { anexarDocumentoVendaPorVisita, type ItemVendaInput } from "../lib/vendas";
 
+import { atualizarItemPedido, itemPedidoParaSalvar, type ItemPedidoFormulario } from "../lib/pedidoLotes";
+
 function hojeLocal() {
   const agora = new Date();
   const ano = agora.getFullYear();
@@ -45,7 +47,7 @@ function formInicial() {
     formasPagamento: [] as string[],
     condicoesPrazo: [] as string[],
     situacaoVenda: "Pedido lançado",
-    itensVenda: [] as ItemVendaInput[],
+    itensVenda: [] as ItemPedidoFormulario[],
     resultado: "Sem venda",
     proximaAcao: "Retorno",
     proximaData: "",
@@ -361,6 +363,8 @@ export default function VisitasPage() {
                 produtoId: produto.id,
                 produto: produto.nome,
                 quantidade: "",
+                quantidadeLotes: "",
+                tamanhoLote: produto.quantidadeMinima,
                 unidade: produto.unidade,
                 valorUnitario: "",
                 valorTotal: "",
@@ -372,11 +376,11 @@ export default function VisitasPage() {
     }));
   }
 
-  function atualizarProdutoVenda(chave: string, campo: keyof ItemVendaInput, valor: string) {
+  function atualizarProdutoVenda(chave: string, campo: keyof ItemPedidoFormulario, valor: string) {
     setForm((atual) => ({
       ...atual,
       itensVenda: atual.itensVenda.map((item) =>
-        chaveItemVenda(item) === chave ? { ...item, [campo]: valor } : item,
+        chaveItemVenda(item) === chave ? atualizarItemPedido(item, campo, valor) : item,
       ),
     }));
   }
@@ -528,6 +532,14 @@ export default function VisitasPage() {
       return;
     }
 
+    let itensParaSalvar: ItemVendaInput[] = [];
+    try {
+      if (form.houveVenda) itensParaSalvar = form.itensVenda.map(itemPedidoParaSalvar);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Confira a quantidade dos produtos.");
+      return;
+    }
+
     const origemCliente = clientes.find((item) => item.id === form.origemClienteId) ?? null;
     const destinoCliente = clientes.find((item) => item.id === form.destinoClienteId) ?? cliente;
     const valorVenda = numeroCampo(form.valorVenda) ?? 0;
@@ -555,7 +567,7 @@ export default function VisitasPage() {
       formasPagamento: form.houveVenda ? form.formasPagamento : [],
       condicoesPrazo: form.houveVenda ? form.condicoesPrazo : [],
       situacaoVenda: form.houveVenda ? form.situacaoVenda : "Pedido lançado",
-      itensVenda: form.houveVenda ? form.itensVenda : [],
+      itensVenda: itensParaSalvar,
       proximaAcao: form.proximaAcao,
       proximaData: form.proximaData,
       frequencia: form.frequencia,
@@ -1109,12 +1121,21 @@ export default function VisitasPage() {
                           )}
 
                           <label className="field">
-                            Quantidade
+                            {item.tamanhoLote !== undefined ? "Quantidade de lotes" : "Quantidade total"}
                             <input
-                              value={item.quantidade ?? ""}
-                              onChange={(event) => atualizarProdutoVenda(chave, "quantidade", event.target.value)}
-                              inputMode="decimal"
+                              type="number"
+                              min={item.tamanhoLote !== undefined ? "1" : undefined}
+                              step={item.tamanhoLote !== undefined ? "1" : "any"}
+                              required={item.tamanhoLote !== undefined}
+                              value={item.tamanhoLote !== undefined ? item.quantidadeLotes ?? "" : item.quantidade ?? ""}
+                              onChange={(event) => atualizarProdutoVenda(chave, item.tamanhoLote !== undefined ? "quantidadeLotes" : "quantidade", event.target.value)}
+                              inputMode={item.tamanhoLote !== undefined ? "numeric" : "decimal"}
                             />
+                            {item.tamanhoLote !== undefined && (
+                              <small>
+                                {item.quantidade ? `${item.quantidadeLotes} × ${item.tamanhoLote.toLocaleString("pt-BR")} = ${Number(item.quantidade).toLocaleString("pt-BR")} ${item.unidade || "unidades"}` : `Cada lote contém ${item.tamanhoLote.toLocaleString("pt-BR")} ${item.unidade || "unidades"}.`}
+                              </small>
+                            )}
                           </label>
 
                           <label className="field">
@@ -1139,6 +1160,7 @@ export default function VisitasPage() {
                           <label className="field">
                             Valor total
                             <input
+                              readOnly={item.tamanhoLote !== undefined}
                               value={item.valorTotal ?? ""}
                               onChange={(event) => atualizarProdutoVenda(chave, "valorTotal", event.target.value)}
                               inputMode="decimal"
