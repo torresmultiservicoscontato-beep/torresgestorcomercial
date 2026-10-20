@@ -16,7 +16,7 @@ O relatório usa paginação explícita de 500 registros e ordenação estável 
 
 ## Acesso
 
-Exige `relatorios.visualizar` e respeita a operação selecionada e o responsável fixado no contexto. Visitas, vendas, despesas, agenda e clientes são consultados somente quando o usuário possui visualização no módulo correspondente. Consultas diretas mantêm RLS existente. Comissões usam o RPC existente, cujo acesso é disponível aos membros ativos, assim como no módulo Comissões. Não houve alteração de schema, políticas, registros ou permissões de usuários.
+Exige `relatorios.visualizar` e respeita a operação selecionada e o responsável fixado no contexto. Visitas, vendas, despesas, agenda e clientes são consultados somente quando o usuário possui visualização no módulo correspondente. Consultas diretas mantêm RLS existente. Comissões usam o RPC existente, cujo acesso é disponível aos membros ativos, assim como no módulo Comissões. As consultas operacionais não alteram registros nem permissões de usuários. O armazenamento de favoritos tem uma tabela própria com RLS, descrita abaixo.
 
 ## Validação
 
@@ -25,3 +25,13 @@ Exige `relatorios.visualizar` e respeita a operação selecionada e o responsáv
 - `node tests/relatorios-ui.cjs`, com o app em localhost:3100 e Playwright disponível. `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` permite indicar Chromium já instalado.
 - Consultas reais de leitura no banco sob papel authenticated: campos, responsáveis, comissões e agenda; isolamento e ocultação de comissões do representante para preposto. Sem gravações.
 - Interface com API simulada: cinco consultas, filtros, cancelados, cliente sem fechamento, vendas por origem, 1.001 linhas, CSV completo, impressão completa, celular, falha de consulta, módulos restritos e negação de acesso ao relatório.
+
+## Montar relatório e Favoritos
+
+A navegação superior mantém Relatórios prontos e acrescenta Montar relatório e Favoritos, sem substituir a tela de consultas existente. No montador, o usuário escolhe uma das cinco fontes, aplica os filtros existentes e marca colunas e indicadores. Pelo menos uma coluna deve permanecer selecionada; os indicadores podem ser ocultados. A prévia, o CSV e a impressão usam a mesma seleção.
+
+Modelos têm nome e podem ser salvos, reabertos, atualizados, copiados e removidos. Podem guardar datas fixas ou recalcular Mês atual / Últimos 30 dias ao abrir. Alterar manualmente as datas e gerar muda o modelo para período fixo. O botão de salvar usa os filtros e o período já aplicados, conforme indicado na tela.
+
+Favoritos ficam em `relatorios_favoritos`, separados por usuário, operação e contexto de responsável. O banco guarda somente configuração, nunca resultados congelados. Reabrir consulta os dados atuais respeitando as permissões atuais. O usuário não acessa favoritos alheios, inclusive quando administra a operação. RLS exige usuário autenticado dono do favorito e acesso à operação; prepostos precisam de `relatorios.visualizar`. Os modelos ficam disponíveis em outros dispositivos da mesma conta.
+
+Validação adicional: `tests/relatorios-favoritos.test.mjs` (configuração, períodos e projeção de campos), `tests/relatorios-favoritos-rls.sql` (transação revertida, CRUD e isolamento), e fluxo de montagem/salvamento/reabertura/cópia/exclusão no teste de interface. A migração aditiva não altera dados operacionais.

@@ -11,6 +11,7 @@ const visitas=[{...visita,id:'vis1',cliente_id:'c1',cliente_nome:'Mercado Centra
 const financeiro=[{ordem_id:'o1',venda_id:'v1',representada_id:'r1',representada_nome:'Representada A',cliente_nome:'Mercado Central',responsavel_user_id:userId,responsavel_nome:'Bruno de teste',data_venda:hoje,status_pedido:'Faturado',numero_pedido:'123',faturado_em:hoje,valor_faturado:100,valor_liquidado:50,comissao_representante_total:4,comissao_representante_liberada:2,comissao_representante_recebida:1,comissao_preposto_total:2,comissao_preposto_liberada:1,comissao_preposto_paga:.5},{ordem_id:'o2',venda_id:'v2',representada_id:'r2',representada_nome:'Representada B',cliente_nome:'Loja das Flores',responsavel_user_id:prep,responsavel_nome:'Preposto de teste',data_venda:hoje,status_pedido:'Faturado',numero_pedido:'456',faturado_em:hoje,valor_faturado:250,valor_liquidado:100,comissao_representante_total:10,comissao_representante_liberada:4,comissao_representante_recebida:3,comissao_preposto_total:5,comissao_preposto_liberada:2,comissao_preposto_paga:1}];
 const despesa={id:'d1',titular_user_id:userId,responsavel_user_id:userId,responsavel_nome:'Bruno de teste',data:hoje,descricao:'Combustível',grupo:'Dia a dia',categoria:'Combustível',cliente_id:'c1',cliente_nome:'Mercado Central',rota_id:'rota1',rota_nome:'Segunda • Magé',status:'Pago',valor_centavos:2090,pago_em:hoje,vencimento:null,fornecedor:'Posto'};
 const requisicoes=[];
+let favoritos=[];let idFavorito=0;
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,args:['--no-sandbox','--disable-dev-shm-usage']});
  const context=await browser.newContext({viewport:{width:1440,height:1050},timezoneId:'America/Sao_Paulo',acceptDownloads:true});
@@ -26,6 +27,12 @@ const requisicoes=[];
   else if(p.endsWith('/rpc/listar_representadas_do_vinculo'))body=[];
   else if(p.endsWith('/rpc/listar_responsaveis_agenda'))body=[{user_id:userId,nome:'Bruno de teste'},{user_id:prep,nome:'Preposto de teste'}];
   else if(p.endsWith('/rpc/listar_comissoes_modulo'))body=modo==='preposto'?financeiro.filter(x=>x.responsavel_user_id===prep).map(x=>({...x,comissao_representante_total:null,comissao_representante_liberada:null,comissao_representante_recebida:null})):financeiro;
+  else if(p.endsWith('/relatorios_favoritos')) {
+   if(req.method()==='POST'){body={...req.postDataJSON(),id:'favorito-'+(++idFavorito)};favoritos.push(body);}
+   else if(req.method()==='PATCH'){const id=u.searchParams.get('id').slice(3);body={...favoritos.find(f=>f.id===id),...req.postDataJSON()};favoritos=favoritos.map(f=>f.id===id?body:f);}
+   else if(req.method()==='DELETE'){const id=u.searchParams.get('id').slice(3);favoritos=favoritos.filter(f=>f.id!==id);body={id};}
+   else body=favoritos.filter(f=>f.usuario_id===u.searchParams.get('usuario_id').slice(3)&&f.titular_user_id===u.searchParams.get('titular_user_id').slice(3)&&f.contexto_responsavel===u.searchParams.get('contexto_responsavel').slice(3));
+  }
   else if(p.endsWith('/visitas'))body=visitas;
   else if(p.endsWith('/vendas'))body=vendas;
   else if(p.endsWith('/despesas'))body=[despesa];
@@ -67,6 +74,43 @@ const requisicoes=[];
  fs.mkdirSync('/tmp/torres-relatorios-qa',{recursive:true});
  await tabs.getByRole('button',{name:'Vendas',exact:true}).click();
  await page.screenshot({path:'/tmp/torres-relatorios-qa/desktop.png',fullPage:true});
+ const modos=page.getByRole('navigation',{name:'Opções de relatórios'});
+ await modos.getByRole('button',{name:'Montar relatório',exact:true}).click();
+ const builder=page.getByRole('region',{name:'Montar relatório',exact:true});
+ await builder.getByLabel('Responsável',{exact:true}).uncheck();
+ await builder.getByLabel('Maior pedido',{exact:true}).uncheck();
+ await builder.getByLabel(/^Período ao abrir/).selectOption('mes-atual');
+ await page.getByRole('region',{name:'Salvar relatório personalizado'}).getByLabel('Nome do relatório',{exact:true}).fill('Vendas favoritas');
+ await page.getByRole('button',{name:'Salvar nos favoritos',exact:true}).click();
+ await page.getByText('Relatório salvo nos favoritos.',{exact:true}).waitFor();
+ assert.equal(favoritos.length,1);assert.equal(favoritos[0].configuracao.colunas.includes('Responsável'),false);assert.equal(favoritos[0].configuracao.periodo.modo,'mes-atual');
+ await page.reload();
+ await modos.getByRole('button',{name:'Favoritos',exact:true}).click();
+ await page.getByText('Vendas favoritas',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Abrir',exact:true}).click();
+ await page.getByRole('heading',{name:'Vendas favoritas',exact:true}).waitFor();
+ await page.locator('thead th').first().waitFor();
+ assert.equal(await page.locator('thead th').count(),5);
+ assert.equal(await builder.getByLabel('Responsável',{exact:true}).isChecked(),false);
+ assert.equal(await builder.getByLabel('Maior pedido',{exact:true}).isChecked(),false);
+ const [customDownload]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Exportar CSV',exact:true}).click()]);
+ const customCsv=fs.readFileSync(await customDownload.path(),'utf8');
+ assert.ok(customCsv.includes('"Data";"Cliente";"Origem da venda";"Situação";"Valor (R$)"'));assert.ok(!customCsv.includes('"Maior pedido"'));
+ await page.getByLabel('Nome do relatório',{exact:true}).fill('Vendas atualizadas');
+ await page.getByRole('button',{name:'Atualizar favorito',exact:true}).click();
+ await page.getByText('Relatório salvo nos favoritos.',{exact:true}).waitFor();assert.equal(favoritos[0].nome,'Vendas atualizadas');
+ await page.getByLabel('Nome do relatório',{exact:true}).fill('Cópia de vendas');
+ await page.getByRole('button',{name:'Salvar cópia',exact:true}).click();
+ await page.getByText('Relatório salvo nos favoritos.',{exact:true}).waitFor();assert.equal(favoritos.length,2);
+ await modos.getByRole('button',{name:'Favoritos',exact:true}).click();
+ await page.getByRole('button',{name:'Remover favorito Cópia de vendas',exact:true}).click();
+ await page.getByText('Favorito removido.',{exact:true}).waitFor();assert.equal(favoritos.length,1);
+ await page.screenshot({path:'/tmp/torres-relatorios-qa/favoritos.png',fullPage:true});
+ await modos.getByRole('button',{name:'Montar relatório',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:'/tmp/torres-relatorios-qa/montar-mobile.png',fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow no montador');
+ await modos.getByRole('button',{name:'Relatórios prontos',exact:true}).click();
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'/tmp/torres-relatorios-qa/mobile.png',fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow mobile');
@@ -99,5 +143,5 @@ const requisicoes=[];
  await page.getByRole('alert').filter({hasText:'Você não possui acesso'}).waitFor();
  assert.ok(!requisicoes.some(p=>p.endsWith('/rpc/listar_comissoes_modulo')));
  assert.deepEqual(errors,[]);await browser.close();
- console.log('OK: cinco relatórios, filtros, cálculos, CSV com 1001 linhas, impressão completa, celular, erros e permissões de preposto.');
+ console.log('OK: montagem, favoritos persistentes, atualização, cópia, exclusão, cinco relatórios, filtros, cálculos, CSV com 1001 linhas, impressão completa, celular, erros e permissões de preposto.');
 })().catch(e=>{console.error(e);process.exit(1)});

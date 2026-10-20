@@ -1,0 +1,32 @@
+begin;
+do $$
+declare titular uuid; preposto uuid; outro uuid; fav uuid; fav_prep uuid; bloqueado boolean; n integer;
+begin
+ select p.titular_user_id,p.user_id into titular,preposto from public.prepostos p where p.status='ativo' and p.user_id is not null and p.permissoes->'relatorios'->>'visualizar'='true' limit 1;
+ select user_id into outro from public.perfis where user_id<>titular and papel<>'admin' limit 1;
+ if titular is null or outro is null then raise exception 'Faltam contas para teste'; end if;
+ perform set_config('request.jwt.claim.sub',titular::text,true);set local role authenticated;
+ insert into public.relatorios_favoritos(usuario_id,titular_user_id,nome,configuracao) values(titular,titular,'Teste transacional','{"versao":1}') returning id into fav;
+ update public.relatorios_favoritos set nome='Modelo atualizado' where id=fav;
+ if not exists(select 1 from public.relatorios_favoritos where id=fav and nome='Modelo atualizado') then raise exception 'Atualização falhou';end if;
+ perform set_config('request.jwt.claim.sub',preposto::text,true);
+ if exists(select 1 from public.relatorios_favoritos where id=fav) then raise exception 'Preposto leu favorito alheio';end if;
+ insert into public.relatorios_favoritos(usuario_id,titular_user_id,contexto_responsavel,nome,configuracao) values(preposto,titular,preposto::text,'Modelo do preposto','{"versao":1}') returning id into fav_prep;
+ bloqueado:=false;
+ begin insert into public.relatorios_favoritos(usuario_id,titular_user_id,nome,configuracao) values(titular,titular,'Falsificação','{"versao":1}');exception when insufficient_privilege then bloqueado:=true;end;
+ if not bloqueado then raise exception 'Usuário falsificado aceito';end if;
+ perform set_config('request.jwt.claim.sub',outro::text,true);
+ if exists(select 1 from public.relatorios_favoritos where id in(fav,fav_prep)) then raise exception 'Vazamento entre operações';end if;
+ delete from public.relatorios_favoritos where id=fav;get diagnostics n=row_count;
+ if n<>0 then raise exception 'Exclusão indevida';end if;
+ perform set_config('request.jwt.claim.sub',titular::text,true);
+ if exists(select 1 from public.relatorios_favoritos where id=fav_prep) then raise exception 'Favorito pessoal do preposto exposto';end if;
+ delete from public.relatorios_favoritos where id=fav;get diagnostics n=row_count;
+ if n<>1 then raise exception 'Exclusão própria falhou';end if;
+ reset role;set local role anon;bloqueado:=false;
+ begin perform * from public.relatorios_favoritos limit 1;exception when insufficient_privilege then bloqueado:=true;end;
+ if not bloqueado then raise exception 'Acesso anônimo permitido';end if;
+ reset role;
+end;$$;
+rollback;
+select 'OK: salvar, atualizar, excluir e isolamento pessoal/operacional; testes revertidos.' as resultado;
