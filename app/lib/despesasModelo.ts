@@ -27,6 +27,8 @@ export type Despesa = {
   observacao: string;
   rota_id: string | null;
   rota_nome: string;
+  cliente_id: string | null;
+  cliente_nome: string;
   criado_por_user_id: string;
   created_at: string;
   updated_at: string;
@@ -38,6 +40,7 @@ export type FormDespesa = Pick<Despesa, "responsavel_user_id" | "grupo" | "categ
   pago_em: string;
   forma_pagamento: FormaPagamento | "";
   rota_id: string;
+  cliente_id: string;
 };
 
 export function hojeDespesa() {

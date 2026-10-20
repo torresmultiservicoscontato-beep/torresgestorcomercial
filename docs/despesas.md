@@ -27,3 +27,9 @@ O menu de relatórios permanece como etapa seguinte. Os dados de despesas ficam 
 - `node --experimental-strip-types --test tests/despesas.test.mjs` (Node 22.6+): centavos, datas, validação e composição dos totais.
 - `tests/despesas-rls.sql`: teste transacional no banco, executado como postgres, com representante, preposto e administrador existentes. Todas as inserções e alterações de permissões são revertidas no final. Confere isolamento, ações por permissão, vínculo da rota, valores, pagamento, cancelamento e bloqueio a anônimos.
 - `tests/despesas-ui.cjs`: Playwright com o aplicativo em `localhost:3100`. Intercepta todas as requisições ao Supabase e usa dados fictícios; não autentica nem grava lançamentos reais. Requer Playwright e Chromium disponíveis no ambiente de teste. Pode usar `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` para um Chromium instalado.
+
+## Cliente opcional
+
+Despesas de qualquer grupo podem ser vinculadas a um cliente, independentemente da rota. O formulário lista somente clientes consultáveis da operação e do responsável selecionado, com paginação completa. Trocar o responsável limpa o vínculo. O banco valida a carteira e as permissões de cliente/representada; o nome é preenchido pelo servidor. A consulta permite filtrar por cliente ou sem vínculo e pesquisar pelo nome, com totais acompanhando o filtro.
+
+O nome registrado é preservado em edições para manter o histórico. O vínculo pode ser removido. Clientes vinculados não podem ser excluídos fisicamente enquanto houver referência; remova o vínculo na despesa antes. Despesas anteriores permanecem sem cliente.
