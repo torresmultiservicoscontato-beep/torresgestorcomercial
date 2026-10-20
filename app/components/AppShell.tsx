@@ -121,7 +121,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       } catch {
         if (!ativo) return;
         setEstadoAcesso("sem-acesso");
-        await supabase.auth.signOut();
+        await clienteSupabase.auth.signOut();
         redirecionar("/login");
       }
     }
@@ -130,7 +130,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    } = clienteSupabase.auth.onAuthStateChange(() => {
       void autenticar();
     });
 
