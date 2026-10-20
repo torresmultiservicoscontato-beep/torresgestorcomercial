@@ -108,7 +108,7 @@ function somarDias(data: string, dias: number) {
 }
 
 function proximaDataAutomatica(data: string, proximaAcao: string, frequencia: string) {
-  if (proximaAcao !== "Retorno") return "";
+  if (proximaAcao === "Sem ação") return "";
   const dias = diasPorFrequencia[frequencia];
   return dias ? somarDias(data, dias) : "";
 }
@@ -172,6 +172,12 @@ export default function VisitasPage() {
   }, []);
 
   useEffect(() => {
+    if (form.proximaAcao === "Sem ação") {
+      if (!form.proximaData && !form.frequencia) return;
+      setForm((atual) => ({ ...atual, proximaData: "", frequencia: "" }));
+      return;
+    }
+
     const calculada = proximaDataAutomatica(form.data, form.proximaAcao, form.frequencia);
     if (!calculada || calculada === form.proximaData) return;
     setForm((atual) => ({ ...atual, proximaData: calculada }));
@@ -580,7 +586,7 @@ export default function VisitasPage() {
     }
   }
 
-  const proximaDataEhAutomatica = form.proximaAcao === "Retorno" && Boolean(diasPorFrequencia[form.frequencia]);
+  const proximaDataEhAutomatica = form.proximaAcao !== "Sem ação" && Boolean(diasPorFrequencia[form.frequencia]);
 
   return (
     <AppShell>
