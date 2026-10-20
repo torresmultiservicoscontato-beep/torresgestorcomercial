@@ -12,6 +12,7 @@ export type ContextoDespesas = {
   podeEditar: boolean;
 };
 export type ResponsavelDespesa = { user_id: string; nome: string; tipo: string };
+export type ClienteDespesa = { id: string; nome: string; cidade: string; bairro: string };
 export type RotaDespesa = { id: string; responsavel_user_id: string; dia_semana: number; municipio: string; bairros: string[] };
 
 async function contexto(acao: "visualizar" | "cadastrar" | "editar" = "visualizar") {
@@ -51,6 +52,24 @@ export async function carregarRotasDespesas(responsavelId: string): Promise<Rota
   return (data ?? []) as RotaDespesa[];
 }
 
+export async function carregarClientesDespesas(responsavelId: string): Promise<ClienteDespesa[]> {
+  const { cliente, ctx } = await contexto();
+  if (ctx.responsavelForcadoId && ctx.responsavelForcadoId !== responsavelId) throw new Error("Responsável fora do contexto atual.");
+  const clientes: ClienteDespesa[] = [];
+  for (let offset = 0; ; offset += 500) {
+    let consulta = cliente.from("clientes").select("id,nome,cidade,bairro").eq("user_id", ctx.titularId);
+    consulta = responsavelId === ctx.titularId
+      ? consulta.or(`responsavel_user_id.eq.${responsavelId},responsavel_user_id.is.null`)
+      : consulta.eq("responsavel_user_id", responsavelId);
+    const { data, error } = await consulta.order("nome").order("id").range(offset, offset + 499);
+    if (error) throw new Error(`Não foi possível carregar os clientes: ${error.message}`);
+    const pagina = (data ?? []) as ClienteDespesa[];
+    clientes.push(...pagina);
+    if (pagina.length < 500) break;
+  }
+  return clientes;
+}
+
 export async function listarDespesas(inicio: string, fim: string): Promise<Despesa[]> {
   if (!dataValida(inicio) || !dataValida(fim) || inicio > fim) throw new Error("Informe um período válido: o início deve ser anterior ou igual ao fim.");
   const { cliente, ctx } = await contexto();
@@ -80,7 +99,7 @@ export async function salvarDespesa(form: FormDespesa, existente?: Despesa | nul
     pago_em: form.status === "Pago" ? form.pago_em : null,
     forma_pagamento: form.status === "Pago" ? form.forma_pagamento : null,
     fornecedor: form.fornecedor.trim(), documento: form.documento.trim(), observacao: form.observacao.trim(),
-    rota_id: form.rota_id || null,
+    rota_id: form.rota_id || null, cliente_id: form.cliente_id || null,
   };
   const consulta = existente
     ? cliente.from("despesas").update(campos).eq("id", existente.id).eq("titular_user_id", ctx.titularId).eq("updated_at", existente.updated_at)

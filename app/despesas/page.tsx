@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowDownLeft, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Pencil, Plus, RefreshCw, Search, Wallet, X } from "lucide-react";
 import AppShell from "../components/AppShell";
-import { carregarOpcoesDespesas, carregarRotasDespesas, listarDespesas, salvarDespesa, type ContextoDespesas, type ResponsavelDespesa, type RotaDespesa } from "../lib/despesas";
+import { carregarClientesDespesas, type ClienteDespesa, carregarOpcoesDespesas, carregarRotasDespesas, listarDespesas, salvarDespesa, type ContextoDespesas, type ResponsavelDespesa, type RotaDespesa } from "../lib/despesas";
 import { categoriasDespesa, formasPagamento, hojeDespesa, resumirDespesas, type Despesa, type FormaPagamento, type FormDespesa, type GrupoDespesa, type StatusDespesa } from "../lib/despesasModelo";
 import styles from "./despesas.module.css";
 
@@ -17,10 +17,10 @@ function periodoMes() {
   return { inicio: `${hoje.slice(0, 7)}-01`, fim: `${hoje.slice(0, 7)}-${new Date(ano, mes, 0).getDate()}` };
 }
 function formularioInicial(responsavel = ""): FormDespesa {
-  return { responsavel_user_id: responsavel, grupo: "Dia a dia", categoria: "Combustível", descricao: "", valor: "", data: hojeDespesa(), vencimento: "", status: "Pago", pago_em: hojeDespesa(), forma_pagamento: "Pix", fornecedor: "", documento: "", observacao: "", rota_id: "" };
+  return { responsavel_user_id: responsavel, grupo: "Dia a dia", categoria: "Combustível", descricao: "", valor: "", data: hojeDespesa(), vencimento: "", status: "Pago", pago_em: hojeDespesa(), forma_pagamento: "Pix", fornecedor: "", documento: "", observacao: "", rota_id: "", cliente_id: "" };
 }
 function formularioDespesa(d: Despesa): FormDespesa {
-  return { ...d, valor: (d.valor_centavos / 100).toFixed(2).replace(".", ","), vencimento: d.vencimento ?? "", pago_em: d.pago_em ?? "", forma_pagamento: d.forma_pagamento ?? "", rota_id: d.rota_id ?? "" };
+  return { ...d, valor: (d.valor_centavos / 100).toFixed(2).replace(".", ","), vencimento: d.vencimento ?? "", pago_em: d.pago_em ?? "", forma_pagamento: d.forma_pagamento ?? "", rota_id: d.rota_id ?? "", cliente_id: d.cliente_id ?? "" };
 }
 
 export default function DespesasPage() {
@@ -36,6 +36,10 @@ export default function DespesasPage() {
   const [categoria, setCategoria] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [situacao, setSituacao] = useState("");
+  const [clienteFiltro, setClienteFiltro] = useState("");
+  const [clientes, setClientes] = useState<ClienteDespesa[]>([]);
+  const [erroClientes, setErroClientes] = useState("");
+  const [carregandoClientes, setCarregandoClientes] = useState(false);
   const [rota, setRota] = useState("");
   const [pagina, setPagina] = useState(1);
   const [form, setForm] = useState<FormDespesa>(formularioInicial);
@@ -72,7 +76,7 @@ export default function DespesasPage() {
   }, [periodo.inicio, periodo.fim]);
 
   useEffect(() => { void carregar(); return () => { requisicao.current++; }; }, [carregar]);
-  useEffect(() => { setPagina(1); }, [busca, grupo, categoria, responsavel, situacao, rota, periodo]);
+  useEffect(() => { setPagina(1); }, [busca, grupo, categoria, responsavel, situacao, rota, clienteFiltro, periodo]);
   useEffect(() => {
     if (formAberto) formularioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [formAberto]);
@@ -89,6 +93,19 @@ export default function DespesasPage() {
     return () => { ativo = false; };
   }, [formAberto, form.responsavel_user_id, form.grupo]);
 
+  useEffect(() => {
+    setClientes([]); setErroClientes("");
+    if (!formAberto || !form.responsavel_user_id) { setCarregandoClientes(false); return; }
+    let ativo = true;
+    setCarregandoClientes(true);
+    void carregarClientesDespesas(form.responsavel_user_id).then((lista) => {
+      if (ativo) setClientes(lista);
+    }).catch((falha: Error) => { if (ativo) setErroClientes(falha.message); })
+      .finally(() => { if (ativo) setCarregandoClientes(false); });
+    return () => { ativo = false; };
+  }, [formAberto, form.responsavel_user_id]);
+
+  const clientesFiltro = useMemo(() => Array.from(new Map(despesas.filter((d) => d.cliente_id).map((d) => [d.cliente_id!, d.cliente_nome])), ([id, nome]) => ({ id, nome })), [despesas]);
   const responsaveisFiltro = useMemo(() => {
     const mapa = new Map(responsaveis.map((r) => [r.user_id, r.nome]));
     despesas.forEach((d) => { if (!mapa.has(d.responsavel_user_id)) mapa.set(d.responsavel_user_id, d.responsavel_nome); });
@@ -97,12 +114,13 @@ export default function DespesasPage() {
   const rotasFiltro = useMemo(() => Array.from(new Map(despesas.filter((d) => d.rota_id).map((d) => [d.rota_id!, d.rota_nome])), ([id, nome]) => ({ id, nome })), [despesas]);
   const filtradas = useMemo(() => despesas.filter((d) => {
     const termo = busca.trim().toLocaleLowerCase("pt-BR");
-    const texto = `${d.descricao} ${d.fornecedor} ${d.documento} ${d.responsavel_nome} ${d.observacao}`.toLocaleLowerCase("pt-BR");
+    const texto = `${d.descricao} ${d.fornecedor} ${d.documento} ${d.responsavel_nome} ${d.observacao} ${d.cliente_nome || ""}`.toLocaleLowerCase("pt-BR");
     return (!termo || texto.includes(termo)) && (!grupo || d.grupo === grupo) && (!categoria || d.categoria === categoria)
       && (!responsavel || d.responsavel_user_id === responsavel)
+      && (!clienteFiltro || (clienteFiltro === "sem-cliente" ? !d.cliente_id : d.cliente_id === clienteFiltro))
       && (!rota || (rota === "sem-rota" ? !d.rota_id : d.rota_id === rota))
       && (!situacao || (situacao === "Vencido" ? d.status === "Pendente" && !!d.vencimento && d.vencimento < hoje : d.status === situacao));
-  }), [despesas, busca, grupo, categoria, responsavel, situacao, rota, hoje]);
+  }), [despesas, busca, grupo, categoria, responsavel, situacao, rota, clienteFiltro, hoje]);
   const resumo = useMemo(() => resumirDespesas(filtradas, hoje), [filtradas, hoje]);
   const paginas = Math.max(1, Math.ceil(filtradas.length / 20));
   const paginaAtual = Math.min(pagina, paginas);
@@ -157,7 +175,7 @@ export default function DespesasPage() {
             <div className={styles.formGrid}>
               <label className={styles.campo}>Grupo<select value={form.grupo} onChange={(e) => { const g = e.target.value as GrupoDespesa; setForm((atual) => ({ ...atual, grupo: g, categoria: categoriasDespesa[g][0], rota_id: g === "Administrativa" ? "" : atual.rota_id })); }}>{Object.keys(categoriasDespesa).map((g) => <option key={g}>{g}</option>)}</select></label>
               <label className={styles.campo}>Categoria<select value={form.categoria} onChange={(e) => alterar("categoria", e.target.value)}>{categoriasDespesa[form.grupo].map((c) => <option key={c}>{c}</option>)}</select></label>
-              <label className={styles.campo}>Responsável<select required value={form.responsavel_user_id} disabled={!!editando || !!contexto?.responsavelForcadoId} onChange={(e) => setForm((atual) => ({ ...atual, responsavel_user_id: e.target.value, rota_id: "" }))}><option value="">Selecione</option>{responsaveis.map((r) => <option key={r.user_id} value={r.user_id}>{r.nome} · {r.tipo}</option>)}{editando && !responsaveis.some((r) => r.user_id === editando.responsavel_user_id) && <option value={editando.responsavel_user_id}>{editando.responsavel_nome}</option>}</select></label>
+              <label className={styles.campo}>Responsável<select required value={form.responsavel_user_id} disabled={!!editando || !!contexto?.responsavelForcadoId} onChange={(e) => setForm((atual) => ({ ...atual, responsavel_user_id: e.target.value, rota_id: "", cliente_id: "" }))}><option value="">Selecione</option>{responsaveis.map((r) => <option key={r.user_id} value={r.user_id}>{r.nome} · {r.tipo}</option>)}{editando && !responsaveis.some((r) => r.user_id === editando.responsavel_user_id) && <option value={editando.responsavel_user_id}>{editando.responsavel_nome}</option>}</select></label>
               <label className={`${styles.campo} ${styles.span2}`}>Descrição<input autoFocus required maxLength={160} placeholder="Ex.: Abastecimento para as visitas de hoje" value={form.descricao} onChange={(e) => alterar("descricao", e.target.value)} /></label>
               <label className={styles.campo}>Valor (R$)<input required inputMode="decimal" placeholder="0,00" value={form.valor} onChange={(e) => alterar("valor", e.target.value)} /></label>
               <label className={styles.campo}>Data da despesa<input required type="date" min="1900-01-01" max="2199-12-31" value={form.data} onChange={(e) => alterar("data", e.target.value)} /></label>
@@ -165,6 +183,7 @@ export default function DespesasPage() {
               <label className={styles.campo}>Situação<select value={form.status} onChange={(e) => { const status = e.target.value as StatusDespesa; setForm((atual) => ({ ...atual, status, pago_em: status === "Pago" ? atual.pago_em || hoje : "", forma_pagamento: status === "Pago" ? atual.forma_pagamento || "Pix" : "" })); }}>{["Pago", "Pendente", "Cancelado"].map((s) => <option key={s}>{s}</option>)}</select></label>
               {form.status === "Pago" && <><label className={styles.campo}>Pago em<input required type="date" min="1900-01-01" max={hoje} value={form.pago_em} onChange={(e) => alterar("pago_em", e.target.value)} /></label><label className={styles.campo}>Forma de pagamento<select required value={form.forma_pagamento} onChange={(e) => alterar("forma_pagamento", e.target.value as FormaPagamento)}><option value="">Selecione</option>{formasPagamento.map((f) => <option key={f}>{f}</option>)}</select></label></>}
               {form.grupo === "Dia a dia" && <label className={`${styles.campo} ${styles.spanAll}`}>Rota <small>opcional</small><select value={form.rota_id} disabled={carregandoRotas} onChange={(e) => alterar("rota_id", e.target.value)}><option value="">{carregandoRotas ? "Carregando rotas…" : "Sem vínculo com rota"}</option>{rotas.map((r) => <option key={r.id} value={r.id}>{nomeRota(r)}</option>)}{editando?.rota_id && !rotas.some((r) => r.id === editando.rota_id) && <option value={editando.rota_id}>{editando.rota_nome}</option>}</select><small>O vínculo identifica a rota do responsável. A data da despesa identifica o dia do gasto. Só aparecem rotas que você pode consultar.</small>{erroRotas && <span role="alert" className={styles.aviso}>{erroRotas} Você pode salvar sem rota.</span>}</label>}
+              <label className={`${styles.campo} ${styles.spanAll}`}>Cliente <small>opcional</small><select value={form.cliente_id} disabled={carregandoClientes} onChange={(e) => alterar("cliente_id", e.target.value)}><option value="">{carregandoClientes ? "Carregando clientes…" : "Sem vínculo com cliente"}</option>{clientes.map((c) => <option key={c.id} value={c.id}>{[c.nome, c.cidade, c.bairro].filter(Boolean).join(" · ")}</option>)}{editando?.cliente_id && !clientes.some((c) => c.id === editando.cliente_id) && <option value={editando.cliente_id}>{editando.cliente_nome}</option>}</select><small>Selecione um cliente do responsável, se este gasto estiver relacionado a ele. O vínculo com a rota é independente.</small>{erroClientes && <span role="alert" className={styles.aviso}>{erroClientes} Você pode salvar sem cliente.</span>}</label>
               <label className={styles.campo}>Fornecedor / estabelecimento <small>opcional</small><input maxLength={160} value={form.fornecedor} onChange={(e) => alterar("fornecedor", e.target.value)} placeholder="Ex.: Posto, restaurante ou escritório" /></label>
               <label className={styles.campo}>Número do comprovante <small>opcional</small><input maxLength={80} value={form.documento} onChange={(e) => alterar("documento", e.target.value)} placeholder="Nota fiscal, recibo ou referência" /></label>
               <label className={`${styles.campo} ${styles.spanAll}`}>Observações <small>opcional</small><textarea rows={3} maxLength={2000} value={form.observacao} onChange={(e) => alterar("observacao", e.target.value)} placeholder="Detalhes que ajudem a identificar este gasto" /></label>
@@ -177,7 +196,7 @@ export default function DespesasPage() {
       </section>}
 
       <section className={`panel ${styles.filtros}`} aria-label="Filtros de despesas">
-        <div className={styles.filtrosTopo}><h2>Consultar despesas</h2><button className={styles.link} type="button" onClick={() => { setPeriodo(periodoMes()); setBusca(""); setGrupo(""); setCategoria(""); setResponsavel(""); setSituacao(""); setRota(""); }}>Limpar filtros</button></div>
+        <div className={styles.filtrosTopo}><h2>Consultar despesas</h2><button className={styles.link} type="button" onClick={() => { setPeriodo(periodoMes()); setBusca(""); setGrupo(""); setCategoria(""); setResponsavel(""); setSituacao(""); setRota(""); setClienteFiltro(""); }}>Limpar filtros</button></div>
         <div className={styles.filtrosGrid}>
           <label className={styles.campo}>De<input type="date" value={periodo.inicio} onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))} /></label>
           <label className={styles.campo}>Até<input type="date" value={periodo.fim} onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))} /></label>
@@ -186,7 +205,8 @@ export default function DespesasPage() {
           <label className={styles.campo}>Responsável<select value={responsavel} onChange={(e) => setResponsavel(e.target.value)}><option value="">{contexto?.responsavelForcadoId ? "Meu contexto atual" : "Todos os responsáveis"}</option>{responsaveisFiltro.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></label>
           <label className={styles.campo}>Situação<select value={situacao} onChange={(e) => setSituacao(e.target.value)}><option value="">Todas as situações</option>{["Pago", "Pendente", "Vencido", "Cancelado"].map((s) => <option key={s}>{s}</option>)}</select></label>
           <label className={styles.campo}>Rota<select value={rota} onChange={(e) => setRota(e.target.value)}><option value="">Todas as rotas</option><option value="sem-rota">Sem vínculo com rota</option>{rotasFiltro.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></label>
-          <label className={styles.campo}>Buscar<div className={styles.busca}><Search size={16} /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Descrição, fornecedor, documento…" /></div></label>
+          <label className={styles.campo}>Cliente<select value={clienteFiltro} onChange={(e) => setClienteFiltro(e.target.value)}><option value="">Todos os clientes</option><option value="sem-cliente">Sem vínculo com cliente</option>{clientesFiltro.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
+          <label className={styles.campo}>Buscar<div className={styles.busca}><Search size={16} /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Descrição, cliente, fornecedor…" /></div></label>
         </div>
         <p className={styles.nota}>Período pela data da despesa. Os indicadores acompanham todos os filtros. Canceladas não entram nos totais; vencidas fazem parte das pendentes.</p>
       </section>
@@ -201,7 +221,7 @@ export default function DespesasPage() {
             return <article key={d.id} className={styles.card}>
               <div className={styles.cardTopo}><div className={styles.despesaIcon}><ArrowDownLeft size={21} /></div><div className={styles.identificacao}><strong>{d.descricao}</strong><span>{d.grupo} · {d.categoria}</span></div><div className={styles.valor}><strong>{moeda(d.valor_centavos)}</strong><span className={`${styles.badge} ${d.status === "Pago" ? styles.pago : d.status === "Cancelado" ? styles.cancelado : vencida ? styles.vencido : styles.pendente}`}>{vencida ? "Vencido" : d.status}</span></div></div>
               <dl className={styles.metadados}><div><dt>Data da despesa</dt><dd>{dataTexto(d.data)}</dd></div><div><dt>Responsável</dt><dd>{d.responsavel_nome}</dd></div><div><dt>{d.status === "Pago" ? "Pagamento" : "Vencimento"}</dt><dd>{dataTexto(d.status === "Pago" ? d.pago_em : d.vencimento)}</dd></div><div><dt>Rota</dt><dd>{d.rota_nome || "Sem vínculo"}</dd></div></dl>
-              <div className={styles.cardRodape}><details><summary>Detalhes do lançamento</summary><div className={styles.detalhes}><p><b>Fornecedor:</b> {d.fornecedor || "Não informado"}</p><p><b>Comprovante:</b> {d.documento || "Não informado"}</p><p><b>Forma de pagamento:</b> {d.forma_pagamento || "Não informada"}</p>{d.observacao && <p className={styles.observacao}><b>Observações:</b> {d.observacao}</p>}</div></details>{contexto?.podeEditar && <div className={styles.acoes}>{d.status === "Pendente" && <button type="button" className={styles.link} onClick={() => editar(d, true)}><CheckCircle2 size={15} /> Registrar pagamento</button>}<button type="button" className="secondary" onClick={() => editar(d)}><Pencil size={15} /> Editar</button></div>}</div>
+              <div className={styles.cardRodape}><details><summary>Detalhes do lançamento</summary><div className={styles.detalhes}><p><b>Cliente:</b> {d.cliente_nome || "Sem vínculo"}</p><p><b>Fornecedor:</b> {d.fornecedor || "Não informado"}</p><p><b>Comprovante:</b> {d.documento || "Não informado"}</p><p><b>Forma de pagamento:</b> {d.forma_pagamento || "Não informada"}</p>{d.observacao && <p className={styles.observacao}><b>Observações:</b> {d.observacao}</p>}</div></details>{contexto?.podeEditar && <div className={styles.acoes}>{d.status === "Pendente" && <button type="button" className={styles.link} onClick={() => editar(d, true)}><CheckCircle2 size={15} /> Registrar pagamento</button>}<button type="button" className="secondary" onClick={() => editar(d)}><Pencil size={15} /> Editar</button></div>}</div>
             </article>;
           })}</div>
           {paginas > 1 && <div className={styles.paginacao}><button type="button" className="secondary" disabled={paginaAtual === 1} onClick={() => setPagina(paginaAtual - 1)} aria-label="Página anterior"><ChevronLeft size={17} /></button><span>Página {paginaAtual} de {paginas}</span><button type="button" className="secondary" disabled={paginaAtual === paginas} onClick={() => setPagina(paginaAtual + 1)} aria-label="Próxima página"><ChevronRight size={17} /></button></div>}
