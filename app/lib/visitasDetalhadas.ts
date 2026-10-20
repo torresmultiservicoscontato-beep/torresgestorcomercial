@@ -351,3 +351,13 @@ export function criarVisitaDetalhada(visita: VisitaDetalhada) {
 export function atualizarVisitaDetalhada(visita: VisitaDetalhada) {
   return salvar(visita, "editar");
 }
+
+export async function excluirVisitaDetalhada(visitaId: string) {
+  const { cliente, userIdAlvo, filtroResponsavelUserId } = await resolverContexto("editar");
+  const { error } = await cliente.rpc("excluir_visita", {
+    p_titular_user_id: userIdAlvo,
+    p_visita_id: visitaId,
+    p_responsavel_user_id: filtroResponsavelUserId,
+  });
+  if (error) throw new Error(`Falha ao excluir visita: ${error.message}`);
+}
