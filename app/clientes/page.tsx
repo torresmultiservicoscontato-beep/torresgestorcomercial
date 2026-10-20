@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, MapPinned, Pencil, Plus, Search, X } from "lucide-react";
+import { Building2, CalendarClock, MapPinned, Pencil, Plus, Search, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
@@ -38,6 +38,7 @@ const formInicial = {
   telefone: "",
   status: "Ativo",
   rotaId: "",
+  frequenciaVisita: "",
 };
 
 function enderecoResumido(cliente: ClienteDetalhado) {
@@ -135,6 +136,7 @@ export default function ClientesPage() {
         cliente.cep,
         cliente.representada,
         cliente.telefone,
+        cliente.frequenciaVisita,
         cliente.responsavelNome,
         rota ? nomeRota(rota) : "",
       ]
@@ -181,6 +183,7 @@ export default function ClientesPage() {
       telefone: cliente.telefone,
       status: cliente.status,
       rotaId: cliente.rotaId ?? "",
+      frequenciaVisita: cliente.frequenciaVisita,
     });
     setMostrarForm(true);
     setErro("");
@@ -255,6 +258,8 @@ export default function ClientesPage() {
       representadas: representadasSelecionadas,
       telefone: form.telefone.trim(),
       status: form.status,
+      frequenciaVisita: form.frequenciaVisita,
+      frequenciaDataBase: clienteExistente?.frequenciaDataBase ?? null,
       rotaId: rotaSelecionada?.id ?? null,
       rotaOrdem: clienteExistente?.rotaOrdem ?? null,
       latitude: clienteExistente?.latitude ?? null,
@@ -262,6 +267,8 @@ export default function ClientesPage() {
       responsavelUserId: clienteExistente?.responsavelUserId,
       responsavelNome: clienteExistente?.responsavelNome,
       responsavelTipo: clienteExistente?.responsavelTipo,
+      ultimaVisita: clienteExistente?.ultimaVisita ?? null,
+      proximaVisitaPrevista: clienteExistente?.proximaVisitaPrevista ?? null,
     };
 
     setSalvando(true);
@@ -291,7 +298,7 @@ export default function ClientesPage() {
         <div>
           <p className="eyebrow">CARTEIRA COMERCIAL</p>
           <h1>Clientes</h1>
-          <p>Cadastre, localize e vincule cada cliente à rota semanal correspondente.</p>
+          <p>Cadastre clientes, defina a frequência de visita e organize a cobertura comercial da carteira.</p>
           <span className="tag">Banco online</span>
         </div>
         {podeCadastrar && (
@@ -424,6 +431,31 @@ export default function ClientesPage() {
             </label>
           </div>
 
+          <div className="permissionsBlock">
+            <div className="settingsSectionTitle">
+              <CalendarClock size={18} />
+              <div>
+                <strong>Frequência de visita do cliente</strong>
+                <span>Ao definir uma frequência, o sistema programa os próximos 6 meses na Agenda sem deslocar o calendário por visitas extraordinárias.</span>
+              </div>
+            </div>
+
+            <label className="field">
+              Frequência
+              <select value={form.frequenciaVisita} onChange={(event) => setForm({ ...form, frequenciaVisita: event.target.value })}>
+                <option value="">Sem frequência definida</option>
+                <option value="Semanal">Semanal (1 semana)</option>
+                <option value="Quinzenal">Quinzenal (2 semanas)</option>
+                <option value="A cada 3 semanas">A cada 3 semanas</option>
+                <option value="A cada 4 semanas">A cada 4 semanas</option>
+                <option value="Mensal">Mensal</option>
+                <option value="Bimestral">Bimestral</option>
+                <option value="Semestral">Semestral</option>
+              </select>
+              <small>A frequência é fixa. Retornos e visitas extras criados em Visitas ficam separados e não alteram esta programação.</small>
+            </label>
+          </div>
+
           <div className="formGrid">
             <label className="field">
               Status
@@ -474,7 +506,15 @@ export default function ClientesPage() {
                       <span className="tag" key={representada.id}>{representada.nome}</span>
                     ))}
                     {rota && <span className="tag routeTag"><MapPinned size={11} /> {nomesDias[rota.diaSemana]}</span>}
+                    {cliente.frequenciaVisita && <span className="tag"><CalendarClock size={11} /> {cliente.frequenciaVisita}</span>}
                   </div>
+                  {cliente.frequenciaVisita && (
+                    <span>
+                      Última visita: {cliente.ultimaVisita ? cliente.ultimaVisita.split("-").reverse().join("/") : "Ainda não registrada"}
+                      {" • "}
+                      Próxima periódica: {cliente.proximaVisitaPrevista ? cliente.proximaVisitaPrevista.split("-").reverse().join("/") : "Sem evento futuro ativo"}
+                    </span>
+                  )}
                 </div>
                 <span className={cliente.responsavelTipo === "preposto" ? "adminBadge" : "tag"}>
                   {cliente.responsavelTipo === "preposto"
