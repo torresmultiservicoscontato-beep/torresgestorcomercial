@@ -14,7 +14,6 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  UserRound,
   X,
   XCircle,
 } from "lucide-react";
@@ -416,7 +415,19 @@ export default function AgendaPage() {
         className={`${styles.eventCard} ${atrasado ? styles.overdue : ""} ${evento.status === "Concluído" ? styles.done : ""}`}
         key={evento.id}
       >
-        <button className={styles.eventMain} type="button" onClick={() => setAbertoId(abertoId === evento.id ? null : evento.id)}>
+        <button
+          className={styles.eventMain}
+          type="button"
+          onClick={() => {
+            if (compacto) {
+              setVisao("hoje");
+              setDataReferencia(evento.data);
+              setAbertoId(evento.id);
+              return;
+            }
+            setAbertoId(abertoId === evento.id ? null : evento.id);
+          }}
+        >
           <div className={styles.eventTime}>
             <Clock3 size={14} />
             <strong>{evento.hora || "Sem horário"}</strong>
