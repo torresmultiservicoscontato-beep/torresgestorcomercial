@@ -6,6 +6,8 @@ import { carregarRelatorio, type DadosRelatorio } from '../lib/relatorios';
 import { gerarCsv, resumoComercial, resumoFinanceiro } from '../lib/relatoriosModelo';
 import { hojeDespesa, resumirDespesas } from '../lib/despesasModelo';
 import styles from './relatorios.module.css';
+import FavoritosRelatorios from './FavoritosRelatorios';
+import { selecionarCampos, periodoFavorito, type ConfiguracaoRelatorio, type FavoritoRelatorio } from '../lib/relatoriosFavoritosModelo';
 
 type Aba = 'visitas' | 'vendas' | 'financeiro' | 'despesas' | 'agenda';
 const nomes: Record<Aba, string> = { visitas: 'Visitas e atividade', vendas: 'Vendas', financeiro: 'Faturamento e comissões', despesas: 'Despesas', agenda: 'Agenda e retornos' };
@@ -14,6 +16,13 @@ const decimal = (n: number) => n.toLocaleString('pt-BR',{maximumFractionDigits:2
 const dataBr = (s: string | null) => s ? s.split('-').reverse().join('/') : '—';
 function mesAtual() { const h=hojeDespesa(); const [a,m]=h.split('-').map(Number); return {inicio:h.slice(0,7)+'-01',fim:h.slice(0,7)+'-'+new Date(a,m,0).getDate()}; }
 export default function RelatoriosPage() {
+  const [modo,setModo]=useState<'prontos'|'montar'|'favoritos'>('prontos');
+  const [nomeModelo,setNomeModelo]=useState('');
+  const [favoritoId,setFavoritoId]=useState<string|null>(null);
+  const [colunasEscolhidas,setColunasEscolhidas]=useState<string[]|null>(null);
+  const [indicadoresEscolhidos,setIndicadoresEscolhidos]=useState<string[]|null>(null);
+  const [modoPeriodo,setModoPeriodo]=useState<ConfiguracaoRelatorio['periodo']['modo']>('fixo');
+  const [periodoModelo,setPeriodoModelo]=useState('');
   const [periodo,setPeriodo]=useState(mesAtual);
   const [aplicado,setAplicado]=useState(mesAtual);
   const [dados,setDados]=useState<DadosRelatorio|null>(null);
@@ -56,7 +65,7 @@ export default function RelatoriosPage() {
     dados?.despesas.forEach(d=>{if(d.cliente_id)mapa.set(d.cliente_id,d.cliente_nome);});
     return mapa;
   },[dados]);
-  const relatorio=useMemo(()=>{
+  const relatorioBase=useMemo(()=>{
     const termo=busca.trim().toLocaleLowerCase('pt-BR');
     const bate=(id:string,texto:string)=> (!responsavel||id===responsavel)&&(!termo||texto.toLocaleLowerCase('pt-BR').includes(termo));
     const visitasBase=(dados?.visitas??[]).filter(v=>bate(v.responsavel_user_id||v.user_id,v.cliente_nome));
@@ -105,20 +114,37 @@ export default function RelatoriosPage() {
     }
     return {indicadores,colunas,linhas,nota};
   },[dados,aba,responsavel,busca,canal,representada,rota,semVenda,nomesResponsaveis,nomesClientes]);
+  const personalizado=modo!=='prontos';
+  const relatorio=useMemo(()=>personalizado?selecionarCampos(relatorioBase,colunasEscolhidas,indicadoresEscolhidos):relatorioBase,[relatorioBase,personalizado,colunasEscolhidas,indicadoresEscolhidos]);
+  const tituloRelatorio=personalizado&&nomeModelo.trim()?nomeModelo.trim():nomes[aba];
+  const configuracao=useMemo<ConfiguracaoRelatorio>(()=>({versao:1,tipo:aba,colunas:relatorio.colunas,indicadores:relatorio.indicadores.map(([nome])=>nome),periodo:{modo:modoPeriodo,...aplicado},filtros:{responsavel: dados?.responsavelForcado?'':responsavel,busca,canal,representada,rota,semVenda}}),[aba,relatorio,modoPeriodo,aplicado,responsavel,busca,canal,representada,rota,semVenda,dados?.responsavelForcado]);
+  function mudarModo(m:'prontos'|'montar'|'favoritos') {
+    setModo(m);
+    if(m==='prontos'){setColunasEscolhidas(null);setIndicadoresEscolhidos(null);setNomeModelo('');setFavoritoId(null);setModoPeriodo('fixo');setPeriodoModelo('');}
+  }
+  function abrirFavorito(f:FavoritoRelatorio) {
+    const c=f.configuracao;
+    if(!dados||(c.tipo!=='financeiro'&&!dados.permissoes[c.tipo]))return;
+    setAba(c.tipo);setNomeModelo(f.nome);setFavoritoId(f.id);setColunasEscolhidas(c.colunas);setIndicadoresEscolhidos(c.indicadores);
+    setModoPeriodo(c.periodo.modo);setModo('montar');setResponsavel(dados.responsavelForcado?'':c.filtros.responsavel);setBusca(c.filtros.busca);setCanal(c.filtros.canal);setRepresentada(c.filtros.representada);setRota(c.filtros.rota);setSemVenda(c.filtros.semVenda&&dados.permissoes.vendas);
+    const novo=periodoFavorito(c.periodo,hojeDespesa());setPeriodo(novo);setAplicado(novo);setPeriodoModelo(`Modelo aberto: ${f.nome}. Resultados atualizados para o período selecionado.`);
+  }
   const paginas=Math.max(1,Math.ceil(relatorio.linhas.length/25));
   const paginaAtual=Math.min(pagina,paginas);
   const opcoesRepresentadas=Array.from(new Map(dados?.financeiro.map(p=>[p.representada_id,p.representada_nome])??[]));
   const opcoesRotas=Array.from(new Map(dados?.despesas.filter(d=>d.rota_id).map(d=>[d.rota_id!,d.rota_nome])??[]));
-  function trocarAba(a:Aba) { setAba(a);setCanal('');setRepresentada('');setRota('');setSemVenda(false); }
-  function aplicar(e:FormEvent) { e.preventDefault();setAplicado({...periodo}); }
+  function trocarAba(a:Aba) { setColunasEscolhidas(null);setIndicadoresEscolhidos(null);setFavoritoId(null);setNomeModelo('');setPeriodoModelo('');setAba(a);setCanal('');setRepresentada('');setRota('');setSemVenda(false); }
+  function aplicar(e:FormEvent) { e.preventDefault();if(periodo.inicio!==aplicado.inicio||periodo.fim!==aplicado.fim)setModoPeriodo('fixo');setAplicado({...periodo}); }
   function exportar() {
-    if(!dados||carregando||erro)return;
-    const csv=gerarCsv([['Torres Gestor Comercial',nomes[aba]],['Operação',dados.operacao],['Período',dataBr(aplicado.inicio)+' a '+dataBr(aplicado.fim)],['Responsável',nomesResponsaveis.get(responsavel||dados.responsavelForcado||'')||'Todos no contexto'],['Busca',busca],['Canal',canal],['Representada',opcoesRepresentadas.find(([id])=>id===representada)?.[1]||'Todas'],['Rota',opcoesRotas.find(([id])=>id===rota)?.[1]||(rota==='sem-rota'?'Sem vínculo':'Todas')],['Somente clientes sem venda',semVenda?'Sim':'Não'],['Gerado em',geradoEm],['Critérios',relatorio.nota],[],...relatorio.indicadores,[],relatorio.colunas,...relatorio.linhas]);
+    if(!dados||carregando||erro||!relatorio.colunas.length)return;
+    const csv=gerarCsv([['Torres Gestor Comercial',tituloRelatorio],['Operação',dados.operacao],['Período',dataBr(aplicado.inicio)+' a '+dataBr(aplicado.fim)],['Responsável',nomesResponsaveis.get(responsavel||dados.responsavelForcado||'')||'Todos no contexto'],['Busca',busca],['Canal',canal],['Representada',opcoesRepresentadas.find(([id])=>id===representada)?.[1]||'Todas'],['Rota',opcoesRotas.find(([id])=>id===rota)?.[1]||(rota==='sem-rota'?'Sem vínculo':'Todas')],['Somente clientes sem venda',semVenda?'Sim':'Não'],['Gerado em',geradoEm],['Critérios',relatorio.nota],[],...relatorio.indicadores,[],relatorio.colunas,...relatorio.linhas]);
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
     const a=document.createElement('a');a.href=url;a.download=`relatorio-${aba}-${aplicado.inicio}-${aplicado.fim}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   return <AppShell><div className={styles.page}>
     <header className={`pageHeader ${styles.header}`}><div><p className="eyebrow">VISÃO DA OPERAÇÃO</p><h1>Relatórios</h1><p>Consulte resultados, acompanhe os gastos e prepare seu fechamento.</p></div><BarChart3 size={32}/></header>
+    <nav className={styles.modos} aria-label="Opções de relatórios">{([['prontos','Relatórios prontos'],['montar','Montar relatório'],['favoritos','Favoritos']] as const).map(([id,nome])=><button key={id} type="button" aria-pressed={modo===id} onClick={()=>mudarModo(id)}>{nome}</button>)}</nav>
+    {modo!=='favoritos'&&<>
     <section className={`panel ${styles.filtros}`} aria-label="Filtros do relatório">
       <form onSubmit={aplicar} className={styles.periodo}>
         <label>De<input required type="date" value={periodo.inicio} onChange={e=>setPeriodo({...periodo,inicio:e.target.value})}/></label>
@@ -136,14 +162,24 @@ export default function RelatoriosPage() {
       </div>
     </section>
     <nav className={styles.abas} aria-label="Tipos de relatório">{(Object.keys(nomes) as Aba[]).filter(a=>!dados||a==='financeiro'||dados.permissoes[a]).map(a=><button key={a} type="button" aria-pressed={aba===a} onClick={()=>trocarAba(a)}>{nomes[a]}</button>)}</nav>
-    {carregando?<div className={styles.estado} role="status">Gerando relatório…</div>:erro?<div className={styles.erro} role="alert"><AlertCircle size={20}/><div>{erro}<p>Os totais não foram exibidos para evitar um relatório incompleto.</p><button className="secondary" onClick={()=>setAtualizacao(v=>v+1)}>Tentar novamente</button></div></div>:dados&&<>
-      <div className={styles.titulo}><div><h2>{nomes[aba]}</h2><p>{dados.operacao} · {dataBr(aplicado.inicio)} a {dataBr(aplicado.fim)}</p><small>Gerado em {geradoEm} · {relatorio.linhas.length} registros</small></div><div className={styles.acoes}><button type="button" className="secondary" onClick={exportar}><Download size={16}/> Exportar CSV</button><button type="button" className="secondary" onClick={()=>window.print()}><Printer size={16}/> Imprimir / PDF</button></div></div>
+    {modo==='montar'&&dados&&!carregando&&!erro&&<section className={`panel ${styles.montador}`} aria-label="Montar relatório">
+      <h2>Montar relatório</h2><p className={styles.criterios}>Escolha o tipo de relatório acima, ajuste os filtros e marque o que deseja exibir. A prévia, o CSV e a impressão acompanham sua seleção.</p>
+      <label>Período ao abrir o favorito<select value={modoPeriodo} onChange={e=>{const valor=e.target.value as ConfiguracaoRelatorio['periodo']['modo'];setModoPeriodo(valor);if(valor!=='fixo'){const p=periodoFavorito({modo:valor,...aplicado},hojeDespesa());setPeriodo(p);setAplicado(p);}}}><option value="fixo">Manter as datas selecionadas</option><option value="mes-atual">Mês atual</option><option value="ultimos-30">Últimos 30 dias</option></select></label>
+      <fieldset><legend>Colunas do relatório</legend><div className={styles.opcoesCampos}>{relatorioBase.colunas.map(c=><label key={c}><input type="checkbox" checked={relatorio.colunas.includes(c)} disabled={relatorio.colunas.length===1&&relatorio.colunas.includes(c)} onChange={e=>setColunasEscolhidas(e.target.checked?[...relatorio.colunas,c]:relatorio.colunas.filter(x=>x!==c))}/>{c}</label>)}</div></fieldset>
+      <fieldset><legend>Indicadores do resumo</legend><div className={styles.opcoesCampos}>{relatorioBase.indicadores.map(([c])=><label key={c}><input type="checkbox" checked={relatorio.indicadores.some(([nome])=>nome===c)} onChange={e=>setIndicadoresEscolhidos(e.target.checked?[...relatorio.indicadores.map(([nome])=>nome),c]:relatorio.indicadores.map(([nome])=>nome).filter(x=>x!==c))}/>{c}</label>)}</div></fieldset>
+      <button className="secondary" type="button" onClick={()=>{setColunasEscolhidas(null);setIndicadoresEscolhidos(null);}}>Selecionar todos os campos</button>
+    </section>}
+    </>}
+    {dados&&!carregando&&!erro&&<FavoritosRelatorios contexto={dados} modo={modo} configuracao={configuracao} nome={nomeModelo} setNome={setNomeModelo} favoritoId={favoritoId} setFavoritoId={setFavoritoId} abrir={abrirFavorito} permitido={tipo=>tipo==='financeiro'||dados.permissoes[tipo]}/>}
+    {periodoModelo&&modo==='montar'&&<p role="status" className={styles.criterios}>{periodoModelo}</p>}
+    {carregando?<div className={styles.estado} role="status">Gerando relatório…</div>:erro?<div className={styles.erro} role="alert"><AlertCircle size={20}/><div>{erro}<p>Os totais não foram exibidos para evitar um relatório incompleto.</p><button className="secondary" onClick={()=>setAtualizacao(v=>v+1)}>Tentar novamente</button></div></div>:dados&&modo!=='favoritos'&&<>
+      <div className={styles.titulo}><div><h2>{tituloRelatorio}</h2><p>{dados.operacao} · {dataBr(aplicado.inicio)} a {dataBr(aplicado.fim)}</p><small>Gerado em {geradoEm} · {relatorio.linhas.length} registros</small></div><div className={styles.acoes}><button type="button" className="secondary" disabled={!relatorio.colunas.length} onClick={exportar}><Download size={16}/> Exportar CSV</button><button type="button" className="secondary" disabled={!relatorio.colunas.length} onClick={()=>window.print()}><Printer size={16}/> Imprimir / PDF</button></div></div>
       <p className={styles.criterios}>Responsável: {nomesResponsaveis.get(responsavel)|| (dados.responsavelForcado?nomesResponsaveis.get(dados.responsavelForcado)||'Contexto atual':'Todos')}{busca?` · Busca: ${busca}`:''}{canal?` · Canal: ${canal}`:''}{representada?` · Representada: ${opcoesRepresentadas.find(([id])=>id===representada)?.[1]}`:''}{rota?` · Rota: ${opcoesRotas.find(([id])=>id===rota)?.[1]||'Sem vínculo'}`:''}{semVenda?' · Somente clientes sem venda':''}</p>
       <div className={styles.indicadores}>{relatorio.indicadores.map(([label,valor])=><article key={label}><span>{label}</span><strong>{valor}</strong></article>)}</div>
       <p className={styles.nota}>{relatorio.nota}</p>
       <section className={styles.resultado} aria-label="Dados do relatório">
         {!relatorio.linhas.length?<div className={styles.estado}><BarChart3 size={30}/><h3>Nenhum registro neste filtro</h3><p>Ajuste o período ou os filtros para consultar outros resultados.</p></div>:<>
-          <div className={styles.tabela}><table><caption>{nomes[aba]} — {relatorio.linhas.length} registros</caption><thead><tr>{relatorio.colunas.map(c=><th key={c} scope="col">{c}</th>)}</tr></thead><tbody>{relatorio.linhas.map((linha,i)=><tr key={i} className={i<(paginaAtual-1)*25||i>=paginaAtual*25?styles.foraPagina:undefined}>{linha.map((valor,j)=><td key={j}>{valor}</td>)}</tr>)}</tbody></table></div>
+          <div className={styles.tabela}><table><caption>{tituloRelatorio} — {relatorio.linhas.length} registros</caption><thead><tr>{relatorio.colunas.map(c=><th key={c} scope="col">{c}</th>)}</tr></thead><tbody>{relatorio.linhas.map((linha,i)=><tr key={i} className={i<(paginaAtual-1)*25||i>=paginaAtual*25?styles.foraPagina:undefined}>{linha.map((valor,j)=><td key={j}>{valor}</td>)}</tr>)}</tbody></table></div>
           <div className={styles.paginacao}><button className="secondary" disabled={paginaAtual===1} onClick={()=>setPagina(paginaAtual-1)}>Anterior</button><span>Página {paginaAtual} de {paginas}</span><button className="secondary" disabled={paginaAtual===paginas} onClick={()=>setPagina(paginaAtual+1)}>Próxima</button></div>
         </>}
       </section>

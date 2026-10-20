@@ -6,7 +6,7 @@ import { dataValida, type Despesa } from './despesasModelo';
 import type { VisitaRelatorio, VendaRelatorio, FinanceiroRelatorio, AgendaRelatorio } from './relatoriosModelo';
 
 export type DadosRelatorio = {
-  operacao: string; preposto: boolean; responsavelForcado: string | null;
+  usuarioId: string; titularId: string; operacao: string; preposto: boolean; responsavelForcado: string | null;
   permissoes: { visitas: boolean; vendas: boolean; despesas: boolean; agenda: boolean };
   responsaveis: { user_id: string; nome: string }[];
   clientes: { id: string; nome: string }[];
@@ -56,6 +56,6 @@ export async function carregarRelatorio(inicio: string, fim: string): Promise<Da
     todas<{user_id: string; nome: string}>((de,ate) => banco.rpc('listar_responsaveis_agenda',{p_titular_user_id: titular}).order('user_id').range(de,ate),'responsáveis'),
     pode(acesso,'clientes','visualizar') ? tabela<{id:string; nome:string}>('clientes','id,nome','user_id',false) : [],
   ]);
-  return { operacao: administrado?.nomeRepresentacao || administrado?.nome || acesso.nomeRepresentacao || acesso.nome, preposto: acesso.papel === 'preposto', responsavelForcado, permissoes,
+  return { usuarioId: acesso.userId, titularId: titular, operacao: administrado?.nomeRepresentacao || administrado?.nome || acesso.nomeRepresentacao || acesso.nome, preposto: acesso.papel === 'preposto', responsavelForcado, permissoes,
     visitas, vendas, financeiro, despesas, agenda, clientes, responsaveis: responsaveis.filter(r => !responsavelForcado || r.user_id === responsavelForcado) };
 }
