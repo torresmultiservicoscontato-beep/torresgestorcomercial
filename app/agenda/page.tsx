@@ -23,19 +23,15 @@ import {
   atualizarStatusAgenda,
   carregarAgenda,
   salvarEventoAgenda,
+  type ClienteAgenda,
   type ContextoAgenda,
   type EventoAgenda,
   type PrioridadeAgenda,
+  type RepresentadaAgenda,
   type ResponsavelAgenda,
   type StatusAgenda,
   type TipoAgenda,
 } from "../lib/agenda";
-import {
-  carregarClientes,
-  carregarRepresentadasOperacionais,
-  type Cliente,
-  type RepresentadaOperacional,
-} from "../lib/data";
 import styles from "./agenda.module.css";
 
 type VisaoAgenda = "hoje" | "semana" | "mes" | "lista";
@@ -131,8 +127,8 @@ export default function AgendaPage() {
   const [contexto, setContexto] = useState<ContextoAgenda | null>(null);
   const [eventos, setEventos] = useState<EventoAgenda[]>([]);
   const [responsaveis, setResponsaveis] = useState<ResponsavelAgenda[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [representadas, setRepresentadas] = useState<RepresentadaOperacional[]>([]);
+  const [clientes, setClientes] = useState<ClienteAgenda[]>([]);
+  const [representadas, setRepresentadas] = useState<RepresentadaAgenda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -157,28 +153,28 @@ export default function AgendaPage() {
     setContexto(dados.contexto);
     setEventos(dados.eventos);
     setResponsaveis(dados.responsaveis);
+    setClientes(dados.clientes);
+    setRepresentadas(dados.representadas);
 
     if (dados.contexto.responsavelForcadoId) {
-      setFiltroResponsavel(dados.contexto.responsavelForcadoId);
+      setFiltroResponsavel(dados.contexto.responsavelForcadoId ?? "");
+    } else if (dados.contexto.modo === "preposto") {
+      setFiltroResponsavel(dados.responsaveis[0]?.userId ?? "");
     }
   }
 
   useEffect(() => {
     let ativo = true;
 
-    void Promise.all([
-      carregarAgenda(),
-      carregarClientes(),
-      carregarRepresentadasOperacionais(),
-    ])
-      .then(([agenda, listaClientes, listaRepresentadas]) => {
+    void carregarAgenda()
+      .then((agenda) => {
         if (!ativo) return;
 
         setContexto(agenda.contexto);
         setEventos(agenda.eventos);
         setResponsaveis(agenda.responsaveis);
-        setClientes(listaClientes);
-        setRepresentadas(listaRepresentadas);
+        setClientes(agenda.clientes);
+        setRepresentadas(agenda.representadas);
 
         const responsavelInicial =
           agenda.contexto.responsavelForcadoId
