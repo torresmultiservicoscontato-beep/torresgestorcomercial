@@ -20,7 +20,7 @@ import {
 import { carregarProdutosModulo, salvarProduto, type ProdutoModulo } from "../lib/produtos";
 import { anexarDocumentoVendaPorVisita, type ItemVendaInput } from "../lib/vendas";
 
-import { atualizarItemPedido, itemPedidoParaSalvar, type ItemPedidoFormulario } from "../lib/pedidoLotes";
+import { atualizarItemPedido, itemPedidoParaSalvar, totalProdutosPedido, type ItemPedidoFormulario } from "../lib/pedidoLotes";
 
 function hojeLocal() {
   const agora = new Date();
@@ -191,6 +191,9 @@ export default function VisitasPage() {
     () => [...visitas].sort((a, b) => `${b.data} ${b.horaEntrada}`.localeCompare(`${a.data} ${a.horaEntrada}`)),
     [visitas],
   );
+
+  const totalProdutos = totalProdutosPedido(form.itensVenda);
+  const vendaComProdutos = form.houveVenda && form.itensVenda.length > 0;
 
   const clienteSelecionado = useMemo(
     () => clientes.find((cliente) => cliente.id === form.clienteId) ?? null,
@@ -546,7 +549,13 @@ export default function VisitasPage() {
 
     const origemCliente = clientes.find((item) => item.id === form.origemClienteId) ?? null;
     const destinoCliente = clientes.find((item) => item.id === form.destinoClienteId) ?? cliente;
-    const valorVenda = numeroCampo(form.valorVenda) ?? 0;
+    const totalParaSalvar = totalProdutosPedido(itensParaSalvar);
+    if (form.houveVenda && itensParaSalvar.length > 0 && totalParaSalvar === null) {
+      setErro("Preencha a quantidade e o valor dos produtos para calcular o total da venda.");
+      return;
+    }
+    const valorVenda = !form.houveVenda ? 0 : itensParaSalvar.length > 0
+      ? totalParaSalvar! : numeroCampo(form.valorVenda) ?? 0;
 
     const visitaParaSalvar: VisitaDetalhada = {
       id: editandoId ?? `visita-${crypto.randomUUID()}`,
@@ -825,10 +834,12 @@ export default function VisitasPage() {
                     min="0"
                     step="0.01"
                     disabled={!form.houveVenda}
-                    value={form.valorVenda}
+                    readOnly={vendaComProdutos}
+                    value={vendaComProdutos ? totalProdutos === null ? "" : totalProdutos.toFixed(2) : form.valorVenda}
                     onChange={(event) => setForm({ ...form, valorVenda: event.target.value })}
                     placeholder="0,00"
                   />
+                  {vendaComProdutos && <small>{totalProdutos === null ? "Preencha os valores dos produtos." : "Calculado automaticamente pela soma dos produtos."}</small>}
                 </label>
               </div>
 
@@ -1178,6 +1189,12 @@ export default function VisitasPage() {
                         </div>
                       );
                     })}
+                    {form.itensVenda.length > 0 && (
+                      <div role="status" style={{ marginTop: 16, padding: 16, border: "1px solid var(--line)", borderRadius: 10 }}>
+                        <strong>Total dos produtos: {totalProdutos === null ? "Aguardando quantidade e valor dos itens" : formatarMoeda(totalProdutos)}</strong>
+                        <p>Este total será salvo como valor da venda.</p>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -1315,11 +1332,9 @@ export default function VisitasPage() {
                 <small>Rota: {visita.origem || "Início da rota"} → {visita.destino || visita.clienteNome}</small>
                 {visita.odometroChegada && <small>Odômetro na chegada: {visita.odometroChegada} km</small>}
                 {visita.kmTrecho !== null && <small>Deslocamento desde a visita anterior: {formatarKm(visita.kmTrecho)}</small>}
-                <small>
-                  {visita.houveVenda
-                    ? `Venda: ${formatarMoeda(visita.valorVenda)}${visita.origemVenda ? ` • ${visita.origemVenda}` : ""}`
-                    : "Venda: não houve"}
-                </small>
+                {visita.houveVenda ? (
+                  <strong>Total da venda: {formatarMoeda(visita.valorVenda)}{visita.origemVenda ? ` • ${visita.origemVenda}` : ""}</strong>
+                ) : <small>Venda: não houve</small>}
                 {(visita.proximaAcao || visita.proximaData || visita.frequencia) && (
                   <small>
                     Próxima ação: {visita.proximaAcao || "—"}
