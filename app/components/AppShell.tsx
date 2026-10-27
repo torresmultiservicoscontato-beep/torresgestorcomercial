@@ -191,6 +191,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         ...menuOperacional,
         { label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: true },
         { label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: true },
+        { label: "Histórico", href: "/historico", icon: ClipboardCheck, modulo: "historico", enabled: true },
         ...(acesso.papel === "admin"
           ? [{ label: "Admin", href: "/admin", icon: ShieldCheck, modulo: "admin", enabled: true }]
           : []),
