@@ -9,6 +9,8 @@ export type ItemVendaInput = {
   produto: string;
   codigo?: string;
   quantidade?: string;
+  tamanhoLote?: number;
+  quantidadeLotes?: string;
   unidade?: string;
   valorUnitario?: string;
   valorTotal?: string;
@@ -21,6 +23,8 @@ export type ItemVenda = {
   produto: string;
   codigo: string;
   quantidade: number | null;
+  tamanhoLote: number | null;
+  quantidadeLotes: number | null;
   unidade: string;
   valorUnitario: number | null;
   valorTotal: number | null;
@@ -193,7 +197,7 @@ export async function carregarVendas(): Promise<Venda[]> {
 
   const [{ data: relRep, error: repError }, { data: itens, error: itensError }, { data: anexos, error: anexosError }] = await Promise.all([
     cliente.from("venda_representadas").select("venda_id,representada_id").in("venda_id", vendaIds),
-    cliente.from("venda_itens").select("id,venda_id,representada_id,produto_id,produto,codigo,quantidade,unidade,valor_unitario,valor_total,origem,confirmado").in("venda_id", vendaIds).order("created_at"),
+    cliente.from("venda_itens").select("id,venda_id,representada_id,produto_id,produto,codigo,quantidade,tamanho_lote,quantidade_lotes,unidade,valor_unitario,valor_total,origem,confirmado").in("venda_id", vendaIds).order("created_at"),
     cliente.from("venda_anexos").select("id,venda_id,nome_arquivo,caminho_storage,tipo_mime,tamanho_bytes,status_extracao").in("venda_id", vendaIds).order("created_at"),
   ]);
 
@@ -230,6 +234,8 @@ export async function carregarVendas(): Promise<Venda[]> {
       produto: item.produto,
       codigo: item.codigo ?? "",
       quantidade: numero(item.quantidade),
+      tamanhoLote: numero(item.tamanho_lote),
+      quantidadeLotes: numero(item.quantidade_lotes),
       unidade: item.unidade ?? "",
       valorUnitario: numero(item.valor_unitario),
       valorTotal: numero(item.valor_total),
@@ -314,6 +320,8 @@ export async function salvarComplementoVenda(venda: Venda, input: {
       produto: item.produto.trim(),
       codigo: item.codigo?.trim() ?? "",
       quantidade: item.quantidade ? Number(item.quantidade.replace(",", ".")) : null,
+      tamanho_lote: item.tamanhoLote ?? null,
+      quantidade_lotes: item.quantidadeLotes ? Number(item.quantidadeLotes.replace(",", ".")) : null,
       unidade: item.unidade?.trim() ?? "",
       valor_unitario: item.valorUnitario ? Number(item.valorUnitario.replace(",", ".")) : null,
       valor_total: item.valorTotal ? Number(item.valorTotal.replace(",", ".")) : null,

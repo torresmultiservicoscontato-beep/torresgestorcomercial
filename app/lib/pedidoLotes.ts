@@ -1,9 +1,6 @@
 import type { ItemVendaInput } from "./vendas";
 
-export type ItemPedidoFormulario = ItemVendaInput & {
-  quantidadeLotes?: string;
-  tamanhoLote?: number;
-};
+export type ItemPedidoFormulario = ItemVendaInput;
 
 // Soma em centavos; null indica item incompleto, nunca um total parcial.
 export function totalProdutosPedido(itens: ItemVendaInput[]): number | null {
@@ -51,8 +48,10 @@ export function atualizarItemPedido(item: ItemPedidoFormulario, campo: keyof Ite
 }
 
 export function itemPedidoParaSalvar(item: ItemPedidoFormulario): ItemVendaInput {
-  const { quantidadeLotes, tamanhoLote, ...salvo } = item;
+  const { quantidadeLotes, tamanhoLote } = item;
+  const salvo = { ...item };
   if (tamanhoLote !== undefined) {
+    if (!Number.isFinite(tamanhoLote) || tamanhoLote <= 0) throw new Error(`Tamanho do lote inválido para ${item.produto}.`);
     const calculado = atualizarItemPedido(item, "quantidadeLotes", quantidadeLotes ?? "");
     if (!calculado.quantidade) throw new Error(`Informe uma quantidade inteira de lotes maior que zero para ${item.produto}.`);
     salvo.quantidade = calculado.quantidade;

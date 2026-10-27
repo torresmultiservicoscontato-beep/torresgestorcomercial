@@ -241,7 +241,7 @@ export async function carregarVisitasDetalhadas(): Promise<VisitaDetalhada[]> {
     if (vendaIds.length > 0) {
       const { data: itens, error: itensError } = await cliente
         .from("venda_itens")
-        .select("venda_id,representada_id,produto_id,produto,codigo,quantidade,unidade,valor_unitario,valor_total")
+        .select("venda_id,representada_id,produto_id,produto,codigo,quantidade,tamanho_lote,quantidade_lotes,unidade,valor_unitario,valor_total")
         .in("venda_id", vendaIds)
         .order("created_at");
 
@@ -254,6 +254,8 @@ export async function carregarVisitasDetalhadas(): Promise<VisitaDetalhada[]> {
           produto: item.produto,
           codigo: item.codigo ?? "",
           quantidade: item.quantidade === null ? "" : String(item.quantidade),
+          tamanhoLote: item.tamanho_lote == null ? undefined : Number(item.tamanho_lote),
+          quantidadeLotes: item.quantidade_lotes == null ? undefined : String(item.quantidade_lotes),
           unidade: item.unidade ?? "",
           valorUnitario: item.valor_unitario === null ? "" : String(item.valor_unitario),
           valorTotal: item.valor_total === null ? "" : String(item.valor_total),

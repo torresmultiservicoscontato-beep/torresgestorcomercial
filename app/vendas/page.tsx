@@ -311,6 +311,7 @@ export default function VendasPage() {
                               <div>
                                 <strong>{item.produto}</strong>
                                 <span>
+                                  {item.tamanhoLote !== null && item.quantidadeLotes !== null ? `${item.quantidadeLotes} lotes × ${item.tamanhoLote} = ` : ""}
                                   {item.quantidade !== null ? `${item.quantidade}${item.unidade ? ` ${item.unidade}` : ""}` : "Quantidade não informada"}
                                   {item.valorUnitario !== null ? ` • ${formatarMoeda(item.valorUnitario)} un.` : ""}
                                   {item.valorTotal !== null ? ` • Total ${formatarMoeda(item.valorTotal)}` : ""}
