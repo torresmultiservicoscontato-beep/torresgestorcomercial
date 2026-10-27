@@ -305,25 +305,6 @@ export async function salvarComplementoVenda(venda: Venda, input: {
 }) {
   const { cliente } = await resolverContexto("editar");
 
-  const { error } = await cliente
-    .from("vendas")
-    .update({
-      formas_pagamento: input.formasPagamento,
-      condicoes_prazo: input.condicoesPrazo,
-      situacao: input.situacao,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", venda.id);
-
-  if (error) throw new Error(`Falha ao atualizar venda: ${error.message}`);
-
-  const { error: deleteError } = await cliente
-    .from("venda_itens")
-    .delete()
-    .eq("venda_id", venda.id);
-
-  if (deleteError) throw new Error(`Falha ao atualizar itens: ${deleteError.message}`);
-
   const linhas = input.itens
     .filter((item) => item.produto.trim())
     .map((item) => ({
@@ -340,10 +321,15 @@ export async function salvarComplementoVenda(venda: Venda, input: {
       confirmado: true,
     }));
 
-  if (linhas.length > 0) {
-    const { error: insertError } = await cliente.from("venda_itens").insert(linhas);
-    if (insertError) throw new Error(`Falha ao salvar itens da venda: ${insertError.message}`);
-  }
+  const { error } = await cliente.rpc("atualizar_venda_com_itens", {
+    p_venda_id: venda.id,
+    p_formas_pagamento: input.formasPagamento,
+    p_condicoes_prazo: input.condicoesPrazo,
+    p_situacao: input.situacao,
+    p_itens: linhas,
+  });
+
+  if (error) throw new Error(`Falha ao atualizar venda e itens: ${error.message}`);
 }
 
 function nomeSeguro(nome: string) {
