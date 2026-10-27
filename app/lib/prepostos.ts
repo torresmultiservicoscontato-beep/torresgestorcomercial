@@ -2,7 +2,7 @@ import { obterRepresentanteAdministrado } from "./adminContext";
 import { carregarPerfilAtual } from "./perfil";
 import { supabase } from "./supabase";
 
-export type AcaoPermissao = "visualizar" | "cadastrar" | "editar";
+export type AcaoPermissao = "visualizar" | "cadastrar" | "editar" | "excluir";
 export type ModuloPermissao = "clientes" | "rotas" | "visitas" | "vendas" | "agenda" | "despesas" | "relatorios";
 export type PermissoesPreposto = Record<ModuloPermissao, Record<AcaoPermissao, boolean>>;
 export type StatusVinculoPreposto = "pendente" | "ativo" | "inativo" | "recusado";
@@ -64,13 +64,13 @@ type VinculoRow = {
 };
 
 export const permissoesPadrao: PermissoesPreposto = {
-  clientes: { visualizar: true, cadastrar: true, editar: true },
-  rotas: { visualizar: true, cadastrar: true, editar: true },
-  visitas: { visualizar: true, cadastrar: true, editar: true },
-  vendas: { visualizar: true, cadastrar: true, editar: true },
-  agenda: { visualizar: true, cadastrar: true, editar: true },
-  despesas: { visualizar: true, cadastrar: true, editar: true },
-  relatorios: { visualizar: true, cadastrar: false, editar: false },
+  clientes: { visualizar: true, cadastrar: true, editar: true, excluir: false },
+  rotas: { visualizar: true, cadastrar: true, editar: true, excluir: false },
+  visitas: { visualizar: true, cadastrar: true, editar: true, excluir: false },
+  vendas: { visualizar: true, cadastrar: true, editar: true, excluir: false },
+  agenda: { visualizar: true, cadastrar: true, editar: true, excluir: false },
+  despesas: { visualizar: true, cadastrar: true, editar: true, excluir: false },
+  relatorios: { visualizar: true, cadastrar: false, editar: false, excluir: false },
 };
 
 function mapear(row: PrepostoRow, representadas: RepresentadaVinculo[] = []): Preposto {

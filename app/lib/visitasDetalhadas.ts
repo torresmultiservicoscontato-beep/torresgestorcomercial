@@ -71,7 +71,7 @@ function exigirSupabase() {
   return supabase;
 }
 
-async function resolverContexto(acao: "visualizar" | "cadastrar" | "editar") {
+async function resolverContexto(acao: "visualizar" | "cadastrar" | "editar" | "excluir") {
   const cliente = exigirSupabase();
   const {
     data: { user },
@@ -348,7 +348,7 @@ export function atualizarVisitaDetalhada(visita: VisitaDetalhada) {
 }
 
 export async function excluirVisitaDetalhada(visitaId: string) {
-  const { cliente, userIdAlvo, filtroResponsavelUserId } = await resolverContexto("editar");
+  const { cliente, userIdAlvo, filtroResponsavelUserId } = await resolverContexto("excluir");
   const { error } = await cliente.rpc("excluir_visita", {
     p_titular_user_id: userIdAlvo,
     p_visita_id: visitaId,
