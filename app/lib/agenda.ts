@@ -62,7 +62,7 @@ function exigirSupabase() {
   return supabase;
 }
 
-async function contexto(): Promise<ContextoAgenda & { cliente: NonNullable<typeof supabase> }> {
+async function contexto(): Promise<ContextoAgenda & { cliente: NonNullable<typeof supabase>; podeVisualizar: boolean }> {
   const cliente = exigirSupabase();
   const {
     data: { user },
@@ -85,6 +85,7 @@ async function contexto(): Promise<ContextoAgenda & { cliente: NonNullable<typeo
     cliente,
     titularUserId,
     modo: acesso.papel === "preposto" ? "preposto" : "gestao",
+    podeVisualizar: pode(acesso, "agenda", "visualizar"),
     podeCadastrar: pode(acesso, "agenda", "cadastrar"),
     podeEditar: pode(acesso, "agenda", "editar"),
     responsavelForcadoId,
@@ -99,6 +100,8 @@ export async function carregarAgenda(): Promise<{
   representadas: RepresentadaAgenda[];
 }> {
   const ctx = await contexto();
+
+  if (!ctx.podeVisualizar) throw new Error("Você não possui permissão para visualizar a Agenda.");
 
   const [
     { data: eventos, error: eventosError },
