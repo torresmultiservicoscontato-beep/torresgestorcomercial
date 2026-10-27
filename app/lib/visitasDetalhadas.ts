@@ -3,7 +3,7 @@ import { limparRepresentanteAdministrado, obterRepresentanteAdministrado } from 
 import { limparPrepostoAdministrado, obterPrepostoAdministrado } from "./prepostoContext";
 import { supabase } from "./supabase";
 import type { RepresentadaOperacional } from "./data";
-import { sincronizarDetalhesVendaVisita, type ItemVendaInput } from "./vendas";
+import type { ItemVendaInput } from "./vendas";
 
 export type TipoContato = "Presencial" | "Telefone" | "WhatsApp" | "Outro";
 
@@ -298,7 +298,7 @@ function decimalOuNull(valor: string) {
 async function salvar(visita: VisitaDetalhada, acao: "cadastrar" | "editar") {
   const { cliente, userIdAlvo, responsavelUserId } = await resolverContexto(acao);
 
-  const { data, error } = await cliente.rpc("salvar_visita_completa_v2", {
+  const { data, error } = await cliente.rpc("salvar_visita_venda_atomica", {
     p_id: visita.id,
     p_titular_user_id: userIdAlvo,
     p_responsavel_user_id: responsavelUserId,
@@ -320,23 +320,18 @@ async function salvar(visita: VisitaDetalhada, acao: "cadastrar" | "editar") {
     p_frequencia: visita.frequencia,
     p_status_cliente: visita.statusCliente,
     p_observacao: visita.observacao,
+    p_formas_pagamento: visita.formasPagamento,
+    p_condicoes_prazo: visita.condicoesPrazo,
+    p_situacao: visita.situacaoVenda,
+    p_itens: visita.itensVenda,
   });
 
   if (error) throw new Error(`${acao === "cadastrar" ? "Falha ao salvar" : "Falha ao atualizar"} visita: ${error.message}`);
   const row = (Array.isArray(data) ? data[0] : data) as VisitaRow | null;
   if (!row) throw new Error("Visita não encontrada após o salvamento.");
 
-  await sincronizarDetalhesVendaVisita({
-    visitaId: row.id,
-    formasPagamento: visita.formasPagamento,
-    condicoesPrazo: visita.condicoesPrazo,
-    situacao: visita.situacaoVenda,
-    itens: visita.itensVenda,
-  });
-
-  const representadas = await carregarRepresentadas([row.id]);
   return {
-    ...mapear(row, representadas.get(row.id) ?? visita.representadas),
+    ...mapear(row, visita.representadas),
     formasPagamento: visita.houveVenda ? visita.formasPagamento : [],
     condicoesPrazo: visita.houveVenda ? visita.condicoesPrazo : [],
     situacaoVenda: visita.houveVenda ? visita.situacaoVenda : "Pedido lançado",
