@@ -95,3 +95,45 @@ revoke all on function private.excluir_visita(uuid,text,uuid),public.excluir_vis
 from public,anon;
 grant execute on function private.excluir_visita(uuid,text,uuid),public.excluir_visita(uuid,text,uuid)
 to authenticated;
+
+
+create or replace function private.pode_excluir_documento_venda_storage(p_nome text)
+returns boolean
+language sql
+stable
+security definer
+set search_path=''
+as $$
+ select
+  auth.uid() is not null
+  and cardinality(storage.foldername(p_nome)) >= 2
+  and (
+   public.usuario_e_admin()
+   or (storage.foldername(p_nome))[1] = auth.uid()::text
+   or exists (
+    select 1
+    from public.auditoria a
+    where a.ator_user_id = auth.uid()
+      and a.tabela = 'vendas'
+      and a.acao = 'DELETE'
+      and a.registro_id = (storage.foldername(p_nome))[2]
+      and a.titular_user_id::text = (storage.foldername(p_nome))[1]
+      and a.ocorrido_em >= clock_timestamp() - interval '1 hour'
+   )
+  );
+$$;
+
+revoke all on function private.pode_excluir_documento_venda_storage(text)
+from public,anon;
+grant execute on function private.pode_excluir_documento_venda_storage(text)
+to authenticated;
+
+drop policy if exists vendas_documentos_delete on storage.objects;
+create policy vendas_documentos_delete
+on storage.objects
+for delete
+to authenticated
+using (
+ bucket_id = 'vendas-documentos'
+ and private.pode_excluir_documento_venda_storage(name)
+);
