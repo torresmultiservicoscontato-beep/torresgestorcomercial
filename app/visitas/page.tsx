@@ -499,16 +499,17 @@ export default function VisitasPage() {
 
   async function excluirVisita(visita: VisitaDetalhada) {
     if (!podeExcluir || excluindoId || salvando) return;
-    const mensagem = `Excluir a visita de ${visita.clienteNome} em ${visita.data.split("-").reverse().join("/")}?\n\nA venda, seus itens e os compromissos vinculados a esta visita também serão excluídos. Esta ação não pode ser desfeita.`;
+    const mensagem = `Excluir a visita de ${visita.clienteNome} em ${visita.data.split("-").reverse().join("/")}?\n\nA venda, seus itens, documentos anexados e os compromissos vinculados a esta visita também serão excluídos. Esta ação não pode ser desfeita.`;
     if (!window.confirm(mensagem)) return;
     setExcluindoId(visita.id);
     setErro("");
     setSucesso("");
     try {
-      await excluirVisitaDetalhada(visita.id);
+      const resultadoExclusao = await excluirVisitaDetalhada(visita.id);
       setVisitas((lista) => lista.filter((item) => item.id !== visita.id));
       if (editandoId === visita.id) cancelarEdicao();
       setSucesso("Visita excluída com sucesso.");
+      if (resultadoExclusao.aviso) setErro(resultadoExclusao.aviso);
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível excluir a visita.");
     } finally {
