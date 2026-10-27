@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { BadgeDollarSign, ChevronDown, ChevronUp, FileText, ShoppingCart } from "lucide-react";
+import Paginacao from "../components/Paginacao";
+import { usePaginacao } from "../hooks/usePaginacao";
 import AppShell from "../components/AppShell";
 import {
   abrirDocumentoVenda,
@@ -109,6 +111,8 @@ export default function VendasPage() {
     const bateSituacao = !filtroSituacao || venda.situacao === filtroSituacao;
     return bateCliente && bateProduto && bateRepresentada && bateResponsavel && bateSituacao;
   }), [vendas, buscaProduto, clienteSelecionadoId, filtroRepresentada, filtroResponsavel, filtroSituacao]);
+
+  const paginacao = usePaginacao(filtradas, JSON.stringify([buscaProduto, clienteSelecionadoId, filtroRepresentada, filtroResponsavel, filtroSituacao]));
 
   const resumoMes = useMemo(() => {
     const agora = new Date();
@@ -232,7 +236,7 @@ export default function VendasPage() {
       <section className={styles.list}>
         {carregando && <div className="panel">Carregando vendas...</div>}
 
-        {!carregando && filtradas.map((venda) => {
+        {!carregando && paginacao.itens.map((venda) => {
           const aberta = abertaId === venda.id;
 
           return (
@@ -338,6 +342,7 @@ export default function VendasPage() {
           </div>
         )}
       </section>
+      {!carregando && <Paginacao {...paginacao} nome="vendas" />}
     </AppShell>
   );
 }
