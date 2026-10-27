@@ -505,10 +505,11 @@ export default function VisitasPage() {
     setErro("");
     setSucesso("");
     try {
-      await excluirVisitaDetalhada(visita.id);
+      const resultadoExclusao = await excluirVisitaDetalhada(visita.id);
       setVisitas((lista) => lista.filter((item) => item.id !== visita.id));
       if (editandoId === visita.id) cancelarEdicao();
       setSucesso("Visita excluída com sucesso.");
+      if (resultadoExclusao.aviso) setErro(resultadoExclusao.aviso);
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível excluir a visita.");
     } finally {
