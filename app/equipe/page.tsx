@@ -334,7 +334,7 @@ export default function EquipePage() {
                       <td><strong>{modulo.label}</strong></td>
                       {acoes.map((acao) => (
                         <td key={acao.id}>
-                          {acao.id === "excluir" && modulo.id !== "visitas" ? <span title="Exclusão não disponível neste módulo">—</span> : <input type="checkbox" aria-label={`${acao.label} ${modulo.label}`} checked={Boolean(form.permissoes[modulo.id]?.[acao.id])} onChange={(event) => alterarPermissao(modulo.id, acao.id, event.target.checked)} />}
+                          {acao.id === "excluir" && modulo.id !== "visitas" && modulo.id !== "rotas" ? <span title="Exclusão não disponível neste módulo">—</span> : <input type="checkbox" aria-label={`${acao.label} ${modulo.label}`} checked={Boolean(form.permissoes[modulo.id]?.[acao.id])} onChange={(event) => alterarPermissao(modulo.id, acao.id, event.target.checked)} />}
                         </td>
                       ))}
                     </tr>

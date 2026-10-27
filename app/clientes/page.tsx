@@ -193,10 +193,6 @@ export default function ClientesPage() {
     try {
       const rotasDoResponsavel = await listarRotasSemanais(cliente.responsavelUserId);
       setRotasFormulario(rotasDoResponsavel);
-
-      if (cliente.rotaId && !rotasDoResponsavel.some((rota) => rota.id === cliente.rotaId)) {
-        setForm((atual) => ({ ...atual, rotaId: "" }));
-      }
     } catch (falha) {
       setRotasFormulario([]);
       setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as rotas deste responsável.");
@@ -225,7 +221,7 @@ export default function ClientesPage() {
     }
 
     const rotaSelecionada = form.rotaId ? rotasFormularioPorId.get(form.rotaId) : null;
-    if (form.rotaId && !rotaSelecionada) {
+    if (form.rotaId && !rotaSelecionada && form.rotaId !== clienteExistente?.rotaId) {
       setErro("A rota selecionada não está mais disponível para o responsável deste cliente.");
       return;
     }
@@ -260,7 +256,7 @@ export default function ClientesPage() {
       status: form.status,
       frequenciaVisita: form.frequenciaVisita,
       frequenciaDataBase: clienteExistente?.frequenciaDataBase ?? null,
-      rotaId: rotaSelecionada?.id ?? null,
+      rotaId: form.rotaId || null,
       rotaOrdem: clienteExistente?.rotaOrdem ?? null,
       latitude: clienteExistente?.latitude ?? null,
       longitude: clienteExistente?.longitude ?? null,
@@ -415,6 +411,9 @@ export default function ClientesPage() {
                 onChange={(event) => setForm({ ...form, rotaId: event.target.value })}
               >
                 <option value="">{carregandoRotasFormulario ? "Carregando rotas..." : "Sem rota definida"}</option>
+                {form.rotaId && !rotasFormularioPorId.has(form.rotaId) && (
+                  <option value={form.rotaId}>Rota anterior (histórico preservado)</option>
+                )}
                 {rotasFormulario.map((rota) => (
                   <option key={rota.id} value={rota.id}>
                     {nomeRota(rota)} — {rota.representadas.map((item) => item.nome).join(" / ")}
