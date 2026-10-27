@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Building2, CalendarClock, Car, ClipboardCheck, DollarSign, MapPin, Paperclip, Pencil, PhoneCall, Plus, Trash2, X } from "lucide-react";
+import Paginacao from "../components/Paginacao";
+import { usePaginacao } from "../hooks/usePaginacao";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
@@ -196,6 +198,8 @@ export default function VisitasPage() {
     () => [...visitas].sort((a, b) => `${b.data} ${b.horaEntrada}`.localeCompare(`${a.data} ${a.horaEntrada}`)),
     [visitas],
   );
+
+  const paginacao = usePaginacao(visitasOrdenadas);
 
   const totalProdutos = totalProdutosPedido(form.itensVenda);
   const vendaComProdutos = form.houveVenda && form.itensVenda.length > 0;
@@ -1329,7 +1333,7 @@ export default function VisitasPage() {
 
           {sucesso && <p role="status">{sucesso}</p>}
           <div className="visitHistory">
-            {!carregando && visitasOrdenadas.map((visita) => (
+            {!carregando && paginacao.itens.map((visita) => (
               <article className="visitItem" key={visita.id}>
                 <div>
                   <strong>{visita.clienteNome}</strong>
@@ -1380,6 +1384,7 @@ export default function VisitasPage() {
 
             {!carregando && visitasOrdenadas.length === 0 && <div className="emptyState">Ainda não há visitas registradas.</div>}
           </div>
+          {!carregando && <Paginacao {...paginacao} nome="visitas" desabilitada={Boolean(excluindoId)} />}
         </section>
       </div>
     </AppShell>

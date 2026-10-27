@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Building2, CalendarClock, MapPinned, Pencil, Plus, Search, X } from "lucide-react";
+import Paginacao from "../components/Paginacao";
+import { usePaginacao } from "../hooks/usePaginacao";
 import AppShell from "../components/AppShell";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
 import {
@@ -145,6 +147,8 @@ export default function ClientesPage() {
         .includes(termo);
     });
   }, [busca, clientes, rotasPorId]);
+
+  const paginacao = usePaginacao(clientesFiltrados, busca);
 
   function representadasPadrao() {
     return representadas.length === 1 ? [representadas[0].id] : [];
@@ -490,7 +494,7 @@ export default function ClientesPage() {
         </div>
 
         <div className="clientList">
-          {!carregando && clientesFiltrados.map((cliente, indice) => {
+          {!carregando && paginacao.itens.map((cliente, indice) => {
             const rota = cliente.rotaId ? rotasPorId.get(cliente.rotaId) : null;
             return (
               <div className="client clientDetailed" key={cliente.id}>
@@ -520,7 +524,7 @@ export default function ClientesPage() {
                     ? `Preposto: ${cliente.responsavelNome ?? "Não identificado"}`
                     : "Titular"}
                 </span>
-                <span className={indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>{cliente.status}</span>
+                <span className={paginacao.inicio + indice === 0 && cliente.status === "Visitar hoje" ? "status attention" : "status"}>{cliente.status}</span>
                 {podeEditar && (
                   <button className="iconBtn editDataButton" type="button" onClick={() => void editar(cliente)} title="Editar cliente">
                     <Pencil size={15} />
@@ -532,6 +536,7 @@ export default function ClientesPage() {
 
           {!carregando && clientesFiltrados.length === 0 && <div className="emptyState">Nenhum cliente cadastrado ainda.</div>}
         </div>
+        {!carregando && <Paginacao {...paginacao} nome="clientes" />}
       </section>
     </AppShell>
   );
