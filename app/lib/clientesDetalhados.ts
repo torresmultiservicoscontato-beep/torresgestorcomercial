@@ -27,6 +27,8 @@ type ClienteDetalheRow = {
   rota_ordem: number | null;
   latitude: number | null;
   longitude: number | null;
+  ultima_visita: string | null;
+  proxima_visita_prevista: string | null;
 };
 
 function exigirSupabase() {
@@ -86,44 +88,15 @@ export async function carregarClientesDetalhados(): Promise<ClienteDetalhado[]> 
     return `${ano}-${mes}-${dia}`;
   })();
 
-  const [
-    { data, error },
-    { data: visitas, error: visitasError },
-    { data: agenda, error: agendaError },
-  ] = await Promise.all([
-    cliente
-      .from("clientes")
-      .select("id,logradouro,numero,complemento,cep,rota_id,rota_ordem,latitude,longitude")
-      .in("id", ids),
-    cliente
-      .from("visitas")
-      .select("cliente_id,data")
-      .in("cliente_id", ids)
-      .order("data", { ascending: false }),
-    cliente
-      .from("agenda_eventos")
-      .select("cliente_id,data")
-      .in("cliente_id", ids)
-      .eq("origem", "frequencia")
-      .eq("status", "Pendente")
-      .gte("data", hoje)
-      .order("data", { ascending: true }),
-  ]);
-
-  if (error) throw new Error(`Falha ao carregar endereço e rota dos clientes: ${error.message}`);
-  if (visitasError) throw new Error(`Falha ao carregar histórico de visitas dos clientes: ${visitasError.message}`);
-  if (agendaError) throw new Error(`Falha ao carregar próximas visitas dos clientes: ${agendaError.message}`);
-
-  const detalhes = new Map(((data ?? []) as ClienteDetalheRow[]).map((row) => [row.id, row]));
-  const ultimaVisita = new Map<string, string>();
-  const proximaVisita = new Map<string, string>();
-
-  for (const visita of visitas ?? []) {
-    if (!ultimaVisita.has(visita.cliente_id)) ultimaVisita.set(visita.cliente_id, visita.data);
-  }
-
-  for (const evento of agenda ?? []) {
-    if (!proximaVisita.has(evento.cliente_id)) proximaVisita.set(evento.cliente_id, evento.data);
+  const detalhes = new Map<string, ClienteDetalheRow>();
+  // Bounded batches avoid oversized requests and API row limits on the summary.
+  for (let inicio = 0; inicio < ids.length; inicio += 200) {
+    const { data, error } = await cliente.rpc("carregar_resumo_clientes", {
+      p_ids: ids.slice(inicio, inicio + 200),
+      p_hoje: hoje,
+    });
+    if (error) throw new Error(`Falha ao carregar detalhes dos clientes: ${error.message}`);
+    for (const row of (data ?? []) as ClienteDetalheRow[]) detalhes.set(row.id, row);
   }
 
   return base.map((item) => {
@@ -138,8 +111,8 @@ export async function carregarClientesDetalhados(): Promise<ClienteDetalhado[]> 
       rotaOrdem: detalhe?.rota_ordem === null || detalhe?.rota_ordem === undefined ? null : Number(detalhe.rota_ordem),
       latitude: detalhe?.latitude === null || detalhe?.latitude === undefined ? null : Number(detalhe.latitude),
       longitude: detalhe?.longitude === null || detalhe?.longitude === undefined ? null : Number(detalhe.longitude),
-      ultimaVisita: ultimaVisita.get(item.id) ?? null,
-      proximaVisitaPrevista: proximaVisita.get(item.id) ?? null,
+      ultimaVisita: detalhe?.ultima_visita ?? null,
+      proximaVisitaPrevista: detalhe?.proxima_visita_prevista ?? null,
     };
   });
 }
