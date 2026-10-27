@@ -118,7 +118,7 @@ as $$
       and a.acao = 'DELETE'
       and a.registro_id = (storage.foldername(p_nome))[2]
       and a.titular_user_id::text = (storage.foldername(p_nome))[1]
-      and a.ocorrido_em >= clock_timestamp() - interval '1 hour'
+      and a.ocorrido_em >= now() - interval '1 hour'
    )
   );
 $$;
