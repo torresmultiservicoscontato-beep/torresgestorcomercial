@@ -68,7 +68,7 @@ function exigirSupabase() {
   return supabase;
 }
 
-async function resolverContexto(acao: "visualizar" | "cadastrar" | "editar") {
+async function resolverContexto(acao: "visualizar" | "cadastrar" | "editar" | "excluir") {
   const cliente = exigirSupabase();
   const {
     data: { user },
@@ -214,4 +214,10 @@ export async function atualizarCoordenadasClienteRota(clienteId: string, latitud
   });
 
   if (error) throw new Error(`Falha ao salvar localização do cliente: ${error.message}`);
+}
+
+export async function excluirRotaSemanal(rotaId: string): Promise<void> {
+  const { cliente } = await resolverContexto("excluir");
+  const { error } = await cliente.rpc("excluir_rota_semanal", { p_rota_id: rotaId });
+  if (error) throw new Error(`Falha ao excluir rota: ${error.message}`);
 }

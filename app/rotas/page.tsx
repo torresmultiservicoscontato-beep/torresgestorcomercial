@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, Map as MapIcon, MapPinned, Pencil, Save, UsersRound, X } from "lucide-react";
+import { Building2, Map as MapIcon, MapPinned, Pencil, Save, Trash2, UsersRound, X } from "lucide-react";
 import AppShell from "../components/AppShell";
 import RouteMap from "../components/RouteMap";
 import { carregarAcessoAtual, pode } from "../lib/acesso";
@@ -12,6 +12,7 @@ import {
   listarRepresentadasParaRotas,
   listarRotasSemanais,
   salvarRotaSemanal,
+  excluirRotaSemanal,
   type ClienteMapaRota,
   type RepresentadaRota,
   type RotaSemanal,
@@ -62,6 +63,8 @@ export default function RotasPage() {
   const [mensagem, setMensagem] = useState("");
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
+  const [podeExcluir, setPodeExcluir] = useState(false);
+  const [excluindo, setExcluindo] = useState<string | null>(null);
   const [podeVerEquipe, setPodeVerEquipe] = useState(false);
   const [mapaRota, setMapaRota] = useState<RotaSemanal | null>(null);
   const [mapaResponsavelNome, setMapaResponsavelNome] = useState("Titular");
@@ -84,6 +87,7 @@ export default function RotasPage() {
         setRepresentadas(listaRepresentadas);
         setPodeCadastrar(pode(acesso, "rotas", "cadastrar"));
         setPodeEditar(pode(acesso, "rotas", "editar"));
+        setPodeExcluir(pode(acesso, "rotas", "excluir"));
         setUsuarioEhPreposto(acesso?.papel === "preposto");
         setNomeProprio(acesso?.papel === "preposto" ? acesso.nome : "Titular");
 
@@ -308,6 +312,25 @@ export default function RotasPage() {
     setClientesMapa((lista) => lista.map((cliente) =>
       cliente.id === clienteId ? { ...cliente, latitude, longitude } : cliente,
     ));
+  }
+
+  async function excluir(item: RotaComResponsavel) {
+    if (excluindo || salvando || !podeExcluir) return;
+    const dia = dias.find((d) => d.id === item.rota.diaSemana)?.nome ?? "dia";
+    if (!window.confirm(`Excluir a rota de ${dia} (${item.nomeResponsavel})? Ela sairá do planejamento. Clientes, visitas, vendas, despesas e históricos serão preservados. Uma nova rota não receberá automaticamente os clientes da antiga.`)) return;
+    setExcluindo(item.rota.id);
+    setErro("");
+    setMensagem("");
+    try {
+      await excluirRotaSemanal(item.rota.id);
+      setRotasPorResponsavel((atual) => Object.fromEntries(Object.entries(atual).map(([chave, lista]) => [chave, lista.filter((r) => r.id !== item.rota.id)])));
+      setMapaRota(null);
+      setMensagem("Rota excluída do planejamento. Histórico preservado.");
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível excluir a rota.");
+    } finally {
+      setExcluindo(null);
+    }
   }
 
   async function salvar(event: FormEvent<HTMLFormElement>) {
@@ -535,6 +558,13 @@ export default function RotasPage() {
                   <div className="routePeopleList">
                     {rotasSelecionadas.map((item) => (
                       <div className="routePersonRoute" key={`${item.chave}-${item.rota.id}`}>
+                        {podeExcluir && (
+                          <button className="iconBtn" type="button" disabled={Boolean(excluindo) || salvando}
+                            onClick={() => void excluir(item)} title={`Excluir rota de ${item.nomeResponsavel}`}
+                            aria-label={`Excluir rota de ${dia.nome} — ${item.nomeResponsavel}`}>
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                         <div className="routePersonRouteHeader">
                           <strong>{item.nomeResponsavel}</strong>
                           <span className={item.propria ? "tag" : "adminBadge"}>{item.propria ? "Própria" : "Preposto"}</span>

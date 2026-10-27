@@ -47,7 +47,7 @@ export async function carregarRotasDespesas(responsavelId: string): Promise<Rota
   if (ctx.responsavelForcadoId && ctx.responsavelForcadoId !== responsavelId) throw new Error("Responsável fora do contexto atual.");
   const { data, error } = await cliente.from("rotas_semanais")
     .select("id,responsavel_user_id,dia_semana,municipio,bairros")
-    .eq("titular_user_id", ctx.titularId).eq("responsavel_user_id", responsavelId).order("dia_semana");
+    .eq("titular_user_id", ctx.titularId).eq("responsavel_user_id", responsavelId).is("excluida_em", null).order("dia_semana");
   if (error) throw new Error(`Não foi possível carregar as rotas: ${error.message}`);
   return (data ?? []) as RotaDespesa[];
 }
