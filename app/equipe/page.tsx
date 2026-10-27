@@ -33,6 +33,7 @@ const acoes: { id: AcaoPermissao; label: string }[] = [
   { id: "visualizar", label: "Visualizar" },
   { id: "cadastrar", label: "Cadastrar" },
   { id: "editar", label: "Editar" },
+  { id: "excluir", label: "Excluir" },
 ];
 
 function copiarPermissoes(permissoes: PermissoesPreposto): PermissoesPreposto {
@@ -333,7 +334,7 @@ export default function EquipePage() {
                       <td><strong>{modulo.label}</strong></td>
                       {acoes.map((acao) => (
                         <td key={acao.id}>
-                          <input type="checkbox" checked={Boolean(form.permissoes[modulo.id]?.[acao.id])} onChange={(event) => alterarPermissao(modulo.id, acao.id, event.target.checked)} />
+                          {acao.id === "excluir" && modulo.id !== "visitas" ? <span title="Exclusão não disponível neste módulo">—</span> : <input type="checkbox" aria-label={`${acao.label} ${modulo.label}`} checked={Boolean(form.permissoes[modulo.id]?.[acao.id])} onChange={(event) => alterarPermissao(modulo.id, acao.id, event.target.checked)} />}
                         </td>
                       ))}
                     </tr>

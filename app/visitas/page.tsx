@@ -129,6 +129,7 @@ export default function VisitasPage() {
   const [form, setForm] = useState(formInicial());
   const [podeCadastrar, setPodeCadastrar] = useState(false);
   const [podeEditar, setPodeEditar] = useState(false);
+  const [podeExcluir, setPodeExcluir] = useState(false);
   const [arquivosVenda, setArquivosVenda] = useState<File[]>([]);
   const [produtosCatalogo, setProdutosCatalogo] = useState<ProdutoModulo[]>([]);
   const [buscaProduto, setBuscaProduto] = useState("");
@@ -163,6 +164,7 @@ export default function VisitasPage() {
         setProdutosCatalogo(listaProdutos.filter((produto) => produto.ativo));
         setPodeCadastrar(pode(acesso, "visitas", "cadastrar"));
         setPodeEditar(pode(acesso, "visitas", "editar"));
+        setPodeExcluir(pode(acesso, "visitas", "excluir"));
         setPodeCadastrarProduto(Boolean(acesso && acesso.papel !== "preposto"));
       })
       .catch((falha: Error) => {
@@ -492,7 +494,7 @@ export default function VisitasPage() {
   }
 
   async function excluirVisita(visita: VisitaDetalhada) {
-    if (!podeEditar || excluindoId || salvando) return;
+    if (!podeExcluir || excluindoId || salvando) return;
     const mensagem = `Excluir a visita de ${visita.clienteNome} em ${visita.data.split("-").reverse().join("/")}?\n\nA venda, seus itens e os compromissos vinculados a esta visita também serão excluídos. Esta ação não pode ser desfeita.`;
     if (!window.confirm(mensagem)) return;
     setExcluindoId(visita.id);
@@ -1345,15 +1347,15 @@ export default function VisitasPage() {
                 <div className="visitItemActions">
                   <span className="tag">{visita.resultado}</span>
                   {podeEditar && (
-                    <>
                       <button className="iconBtn editDataButton" type="button" disabled={salvando || Boolean(excluindoId)} onClick={() => editar(visita)} title="Editar visita">
                         <Pencil size={14} />
                       </button>
+                  )}
+                  {podeExcluir && (
                       <button className="iconBtn" type="button" disabled={salvando || Boolean(excluindoId)} onClick={() => excluirVisita(visita)} title="Excluir visita" aria-label={`Excluir visita de ${visita.clienteNome}`}>
                         <Trash2 size={16} />
                         {excluindoId === visita.id && <span>Excluindo...</span>}
                       </button>
-                    </>
                   )}
                 </div>
 
