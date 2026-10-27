@@ -349,12 +349,51 @@ export function atualizarVisitaDetalhada(visita: VisitaDetalhada) {
   return salvar(visita, "editar");
 }
 
-export async function excluirVisitaDetalhada(visitaId: string) {
+export type ResultadoExclusaoVisita = {
+  arquivosRemovidos: number;
+  arquivosPendentes: number;
+  aviso: string;
+};
+
+export async function excluirVisitaDetalhada(visitaId: string): Promise<ResultadoExclusaoVisita> {
   const { cliente, userIdAlvo, filtroResponsavelUserId } = await resolverContexto("excluir");
-  const { error } = await cliente.rpc("excluir_visita", {
+  const { data, error } = await cliente.rpc("excluir_visita", {
     p_titular_user_id: userIdAlvo,
     p_visita_id: visitaId,
     p_responsavel_user_id: filtroResponsavelUserId,
   });
+
   if (error) throw new Error(`Falha ao excluir visita: ${error.message}`);
+
+  const caminhos = Array.isArray(data)
+    ? data.filter((caminho): caminho is string => typeof caminho === "string" && caminho.trim().length > 0)
+    : [];
+
+  if (caminhos.length === 0) {
+    return { arquivosRemovidos: 0, arquivosPendentes: 0, aviso: "" };
+  }
+
+  const bucket = cliente.storage.from("vendas-documentos");
+  const { error: remocaoEmLoteError } = await bucket.remove(caminhos);
+
+  if (!remocaoEmLoteError) {
+    return { arquivosRemovidos: caminhos.length, arquivosPendentes: 0, aviso: "" };
+  }
+
+  let arquivosRemovidos = 0;
+  const pendentes: string[] = [];
+
+  for (const caminho of caminhos) {
+    const { error: remocaoIndividualError } = await bucket.remove([caminho]);
+    if (remocaoIndividualError) pendentes.push(caminho);
+    else arquivosRemovidos += 1;
+  }
+
+  return {
+    arquivosRemovidos,
+    arquivosPendentes: pendentes.length,
+    aviso: pendentes.length > 0
+      ? `A visita e a venda foram excluídas, mas ${pendentes.length} arquivo(s) anexado(s) não puderam ser removidos do armazenamento.`
+      : "",
+  };
 }
