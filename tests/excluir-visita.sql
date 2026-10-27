@@ -1,6 +1,6 @@
 begin;
 do $$
-declare v public.visitas; titular uuid; outro uuid; preposto uuid; venda uuid; ordem uuid; rep uuid; bloqueado boolean;
+declare v public.visitas; titular uuid; outro uuid; preposto uuid; venda uuid; ordem uuid; rep uuid; bloqueado boolean; caminhos text[]; caminho text;
 begin
  select * into v from public.visitas limit 1;
  if v.id is null then raise exception 'Sem visita para teste';end if;
@@ -11,6 +11,9 @@ begin
  v.responsavel_user_id:=titular;v.proxima_data:=current_date+1;v.proxima_acao:='Retorno';
  insert into public.visitas select v.*;
  insert into public.vendas(titular_user_id,responsavel_user_id,visita_id,cliente_id,cliente_nome,data,valor) values(titular,titular,v.id,v.cliente_id,v.cliente_nome,current_date,100) returning id into venda;
+ caminho:='teste/'||venda::text||'/comprovante.pdf';
+ insert into public.venda_anexos(venda_id,nome_arquivo,caminho_storage,tipo_mime,tamanho_bytes,status_extracao)
+ values(venda,'comprovante.pdf',caminho,'application/pdf',123,'pendente');
  insert into public.venda_ordens(venda_id,representada_id) values(venda,rep) returning id into ordem;
  perform set_config('request.jwt.claim.sub',outro::text,true);set local role authenticated;
  bloqueado:=false;
@@ -29,8 +32,9 @@ begin
  reset role;
  delete from public.venda_comissao_pagamentos where ordem_id=ordem;
  set local role authenticated;
- perform public.excluir_visita(titular,v.id);
+ select public.excluir_visita(titular,v.id) into caminhos;
  reset role;
+ if caminhos is null or not (caminho=any(caminhos)) then raise exception 'Caminho do anexo não retornado para limpeza do Storage';end if;
  if exists(select 1 from public.visitas where id=v.id) or exists(select 1 from public.vendas where id=venda) or exists(select 1 from public.venda_ordens where id=ordem) or exists(select 1 from public.agenda_eventos where visita_id=v.id) then raise exception 'Cascata incompleta';end if;
  -- Usa um vínculo real apenas dentro da transação revertida.
  select p.user_id,p.titular_user_id into preposto,titular from public.prepostos p where p.user_id is not null and not exists(select 1 from public.perfis f where f.user_id=p.user_id and f.papel='admin') limit 1;
