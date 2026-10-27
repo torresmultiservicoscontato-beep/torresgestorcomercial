@@ -499,7 +499,7 @@ export default function VisitasPage() {
 
   async function excluirVisita(visita: VisitaDetalhada) {
     if (!podeExcluir || excluindoId || salvando) return;
-    const mensagem = `Excluir a visita de ${visita.clienteNome} em ${visita.data.split("-").reverse().join("/")}?\n\nA venda, seus itens e os compromissos vinculados a esta visita também serão excluídos. Esta ação não pode ser desfeita.`;
+    const mensagem = `Excluir a visita de ${visita.clienteNome} em ${visita.data.split("-").reverse().join("/")}?\n\nA venda, seus itens, documentos anexados e os compromissos vinculados a esta visita também serão excluídos. Esta ação não pode ser desfeita.`;
     if (!window.confirm(mensagem)) return;
     setExcluindoId(visita.id);
     setErro("");
