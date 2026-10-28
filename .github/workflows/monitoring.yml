@@ -1,0 +1,122 @@
+name: Monitoramento e alertas
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 */3 * * *'
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: monitoramento-producao
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      detail: ${{ steps.check.outputs.detail }}
+    steps:
+      - id: check
+        name: Consultar saúde da API, aplicação e rotina de backup
+        env:
+          PROD_APP_URL: ${{ vars.PROD_APP_URL }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          from datetime import datetime, timezone, timedelta
+          from urllib.parse import urlparse
+
+          errors = []
+          def get(url, headers=None):
+              req = urllib.request.Request(url, headers=headers or {}, method="GET")
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  return response.status, response.read()
+
+          # Testa disponibilidade da API sem ler dados reais ou inserir registros.
+          try:
+              status, _ = get("https://sqlrhvxiluzgeldxcmyf.supabase.co/auth/v1/health")
+              if status != 200: errors.append(f"Supabase Auth HTTP {status}")
+          except Exception as e:
+              errors.append(f"Supabase Auth indisponível ({type(e).__name__})")
+
+          app = os.getenv("PROD_APP_URL", "").strip()
+          if app:
+              parsed = urlparse(app)
+              if parsed.scheme != "https" or not parsed.hostname:
+                  errors.append("PROD_APP_URL deve usar HTTPS")
+              else:
+                  try:
+                      status, _ = get(app)
+                      if not 200 <= status < 400:
+                          errors.append(f"Aplicação HTTP {status}")
+                  except Exception as e:
+                      errors.append(f"Aplicação indisponível ({type(e).__name__})")
+          else:
+              print("PROD_APP_URL não configurada: monitoramento web não ativado.")
+
+          # Monitora backup diário apenas após configuração explícita.
+          # Evita alarmes falsos antes da ativação da rotina de backup.
+          if os.getenv("BACKUP_MONITOR_ENABLED", "").lower() == "true":
+              url = f"https://api.github.com/repos/{os.environ['GH_REPO']}/actions/workflows/backup-production.yml/runs?per_page=30"
+              try:
+                  status, raw = get(url, {
+                      "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  })
+                  runs = json.loads(raw).get("workflow_runs", [])
+                  limit = datetime.now(timezone.utc) - timedelta(hours=30)
+                  valid = [r for r in runs if r.get("conclusion") == "success" and
+                           datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")) > limit]
+                  if not valid:
+                      errors.append("Nenhum backup concluído com sucesso nas últimas 30 horas")
+              except Exception as e:
+                  errors.append(f"Falha ao consultar execução do backup ({type(e).__name__})")
+          else:
+              print("Monitor de backups desativado até primeiro backup validado.")
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              detail = "; ".join(errors) or "Todas as verificações habilitadas passaram"
+              print("detail=" + detail.replace("\n", " ")[:1000], file=output)
+          if errors:
+              print("ALERTA: " + "; ".join(errors))
+              raise SystemExit(1)
+          print("OK: verificações habilitadas concluídas.")
+          PY
+        env:
+          PROD_APP_URL: ${{ vars.PROD_APP_URL }}
+          BACKUP_MONITOR_ENABLED: ${{ vars.BACKUP_MONITOR_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+
+  alert:
+    needs: health
+    if: ${{ always() && needs.health.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Abrir ou atualizar incidente no GitHub
+        uses: actions/github-script@v7
+        env:
+          FAILURE_DETAILS: ${{ needs.health.outputs.detail }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = '[Monitoramento] Falha de disponibilidade ou backup';
+            const {owner, repo} = context.repo;
+            const query = await github.paginate(github.rest.issues.listForRepo, {owner, repo, state:'open', per_page:100});
+            const current = query.find(i => !i.pull_request && i.title === title);
+            const info = process.env.FAILURE_DETAILS || 'Execução do monitor falhou';
+            const body = `Falha detectada em ${new Date().toISOString()} (UTC).\n\n${info}\n\nExecução: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\nVerificar o log antes de encerrar o incidente.`;
+            if (current) {
+              await github.rest.issues.createComment({owner, repo, issue_number:current.number, body});
+            } else {
+              await github.rest.issues.create({owner, repo, title, body});
+            }
