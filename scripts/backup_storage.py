@@ -46,10 +46,10 @@ def walk(prefix=""):
             else:
                 raw = request("/storage/v1/object/authenticated/" + quote(bucket, safe="") + "/" + quote(path, safe="/"))
                 dst = root / "objects" / path
-                dst.parent.mkdir(parents=True, exist_ok=True)
                 # Proteção contra traversal, inclusive nomes malformados.
                 if not dst.resolve().is_relative_to((root / "objects").resolve()):
                     raise ValueError("Caminho inválido do Storage")
+                dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes(raw)
                 files.append({"path": path, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
         if len(entries) < 100:
