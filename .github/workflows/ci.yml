@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 20
     env:
       NEXT_PUBLIC_APP_ENV: test
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_URL: https://bwoxqsbqbtrkfvrsswrq.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_dummy_ci_only
     steps:
       - uses: actions/checkout@v4
@@ -32,5 +32,7 @@ jobs:
         run: npm run typecheck
       - name: Verificar lint
         run: npm run lint
+      - name: Validar configuração segura dos ambientes
+        run: node scripts/check-environment.cjs
       - name: Compilar aplicação
         run: npm run build
