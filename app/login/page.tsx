@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { LockKeyhole, Mail, UserRound, Users } from "lucide-react";
 import { carregarAcessoAtual } from "../lib/acesso";
 import { carregarPerfilPrepostoAtual } from "../lib/prepostoPerfil";
@@ -159,6 +160,7 @@ export default function LoginPage() {
             {modo === "entrar" ? "Primeiro acesso? Criar conta" : "Já tenho acesso? Entrar"}
           </button>
         )}
+        <nav aria-label="Informações legais e atendimento" style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:14,marginTop:24}}><Link href="/termos">Termos de Uso</Link><Link href="/privacidade">Privacidade</Link><Link href="/suporte">Suporte</Link></nav>
       </section>
     </main>
   );
