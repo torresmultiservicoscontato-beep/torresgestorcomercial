@@ -23,10 +23,6 @@ jobs:
     steps:
       - id: check
         name: Consultar saúde da API, aplicação e rotina de backup
-        env:
-          PROD_APP_URL: ${{ vars.PROD_APP_URL }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           python3 - <<'PY'
