@@ -12,7 +12,11 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_APP_ENV: test
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_dummy_ci_only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,7 +26,11 @@ jobs:
       - run: npm ci
       - name: Testes unitários
         run: npm test
+      - name: Testes de interface
+        run: npm run test:ui
       - name: Verificar tipos
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Verificar lint
         run: npm run lint
+      - name: Compilar aplicação
+        run: npm run build
