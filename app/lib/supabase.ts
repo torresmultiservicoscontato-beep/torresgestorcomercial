@@ -8,14 +8,26 @@ const projectPublishableKey =
   "";
 
 const appEnvironment = process.env.NEXT_PUBLIC_APP_ENV?.trim() || "";
-const productionProjectRef = "sqlrhvxiluzgeldxcmyf";
+const projectHosts: Record<string, string> = {
+  test: "bwoxqsbqbtrkfvrsswrq.supabase.co",
+  production: "sqlrhvxiluzgeldxcmyf.supabase.co",
+};
 
-if (
-  appEnvironment === "test" &&
-  projectUrl &&
-  new URL(projectUrl).hostname === `${productionProjectRef}.supabase.co`
-) {
-  throw new Error("Configuração inválida: ambiente de testes não pode usar o Supabase de produção.");
+if (projectUrl || projectPublishableKey) {
+  if (!projectHosts[appEnvironment]) {
+    throw new Error("Defina NEXT_PUBLIC_APP_ENV como test ou production.");
+  }
+
+  let hostname: string;
+  try {
+    hostname = new URL(projectUrl).hostname;
+  } catch {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL inválida.");
+  }
+
+  if (hostname !== projectHosts[appEnvironment]) {
+    throw new Error("Supabase configurado não corresponde ao ambiente informado.");
+  }
 }
 
 export const supabaseUrl = projectUrl;
