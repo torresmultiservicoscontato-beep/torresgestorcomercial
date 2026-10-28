@@ -254,6 +254,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </label>
           )}
 
+          <nav aria-label="Ajuda e informações legais" style={{display:"flex",flexDirection:"column",gap:8,margin:"14px 0"}}><Link href="/suporte">Suporte</Link><Link href="/termos">Termos de Uso</Link><Link href="/privacidade">Privacidade</Link></nav>
           <span className="userEmail">{email}</span>
           <button className="logoutButton" type="button" onClick={sair}>
             <LogOut size={16} />
