@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, ClipboardCheck, Eye, ShieldCheck, UserRoundCog, Users } from "lucide-react";
+import Link from "next/link";
+import { Building2, ClipboardCheck, CreditCard, Eye, ShieldCheck, UserRoundCog, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "../components/AppShell";
 import { definirRepresentanteAdministrado } from "../lib/adminContext";
@@ -78,6 +79,7 @@ export default function AdminPage() {
           <p className="eyebrow">ADMINISTRAÇÃO</p>
           <h1>Painel do Admin</h1>
           <p>Escolha um representante para abrir e administrar o painel operacional dele.</p>
+          <Link className="secondary adminAccessButton" href="/admin/assinaturas" style={{display:"inline-flex",alignItems:"center",gap:8,marginTop:12}}><CreditCard size={17} /> Planos e Assinaturas</Link>
         </div>
       </header>
 
