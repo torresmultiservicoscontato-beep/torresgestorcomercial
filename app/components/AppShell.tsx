@@ -38,7 +38,7 @@ import {
   obterPrepostoAdministrado,
   type PrepostoAdministrado,
 } from "../lib/prepostoContext";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseConfigured, supabaseUrl } from "../lib/supabase";
 
 const operacionais = [
   { label: "Início", href: "/", icon: Home, modulo: "inicio", enabled: true },
@@ -60,6 +60,9 @@ function redirecionar(destino: string) {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const ambiente = process.env.NEXT_PUBLIC_APP_ENV;
+  const testes = supabaseConfigured && ambiente === "test" && new URL(supabaseUrl).hostname === "bwoxqsbqbtrkfvrsswrq.supabase.co";
+  const producao = supabaseConfigured && ambiente === "production" && new URL(supabaseUrl).hostname === "sqlrhvxiluzgeldxcmyf.supabase.co";
   const [estadoAcesso, setEstadoAcesso] = useState<"verificando" | "autenticado" | "sem-acesso" | "erro">("verificando");
   const [erroAcesso, setErroAcesso] = useState("");
   const [email, setEmail] = useState("");
@@ -275,6 +278,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <section className="content">
+        <div role="status" aria-label="Ambiente conectado" style={{
+          position: "sticky", top: 0, zIndex: 40, padding: "9px 16px",
+          background: testes ? "#dcfce7" : producao ? "#fee2e2" : "#fef3c7",
+          color: testes ? "#166534" : producao ? "#991b1b" : "#92400e",
+          borderBottom: "1px solid currentColor", fontWeight: 800, fontSize: 12,
+          letterSpacing: "0.06em", textAlign: "center",
+        }}>
+          {testes ? "AMBIENTE DE TESTES — Supabase de testes" : producao ? "AMBIENTE DE PRODUÇÃO — Dados reais" : "AMBIENTE NÃO VERIFICADO — Confira a configuração"}
+        </div>
         {representanteAdministrado && (
           <div className="adminContextBar">
             <div>
