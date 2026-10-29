@@ -1,5 +1,7 @@
 # Reprodução segura do esquema de produção no ambiente de testes
 
+Procedimento ativo de instalação vazia e diagnóstico: [docs/ambiente-testes.md](../../docs/ambiente-testes.md). Não executar db push nos arquivos históricos sem resolver a baseline e as versões duplicadas.
+
 Status: **snapshot tipado obtido**, dump SQL completo **pendente**.
 
 ## Ambientes

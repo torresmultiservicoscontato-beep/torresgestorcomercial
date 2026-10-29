@@ -60,7 +60,8 @@ function redirecionar(destino: string) {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [estadoAcesso, setEstadoAcesso] = useState<"verificando" | "autenticado" | "sem-acesso">("verificando");
+  const [estadoAcesso, setEstadoAcesso] = useState<"verificando" | "autenticado" | "sem-acesso" | "erro">("verificando");
+  const [erroAcesso, setErroAcesso] = useState("");
   const [email, setEmail] = useState("");
   const [acesso, setAcesso] = useState<AcessoSistema | null>(null);
   const [representanteAdministrado, setRepresentanteAdministrado] = useState<RepresentanteAdministrado | null>(null);
@@ -77,26 +78,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
     let ativo = true;
 
     async function autenticar() {
-      const {
-        data: { user },
-        error,
-      } = await clienteSupabase.auth.getUser();
-
-      if (!ativo) return;
-      if (error || !user) {
-        setEstadoAcesso("sem-acesso");
-        redirecionar("/login");
-        return;
-      }
-
-      if (user.user_metadata?.must_change_password) {
-        redirecionar("/preposto/ativar");
-        return;
-      }
-
-      setEmail(user.email ?? "Usuário autenticado");
-
       try {
+        const {
+          data: { user },
+          error,
+        } = await clienteSupabase.auth.getUser();
+
+        if (!ativo) return;
+        if (error || !user) {
+          setEstadoAcesso("sem-acesso");
+          redirecionar("/login");
+          return;
+        }
+
+        if (user.user_metadata?.must_change_password) {
+          redirecionar("/preposto/ativar");
+          return;
+        }
+
+        setEmail(user.email ?? "Usuário autenticado");
+
         const acessoAtual = await carregarAcessoAtual();
         if (!ativo) return;
 
@@ -119,12 +120,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
         setAcesso(acessoAtual);
         setRepresentanteAdministrado(representante);
         setPrepostoAdministrado(preposto);
+        setErroAcesso("");
         setEstadoAcesso("autenticado");
-      } catch {
+      } catch (falha) {
         if (!ativo) return;
-        setEstadoAcesso("sem-acesso");
-        await clienteSupabase.auth.signOut();
-        redirecionar("/login");
+        setErroAcesso(falha instanceof Error ? falha.message : "Não foi possível carregar seu acesso.");
+        setAcesso(null);
+        setEstadoAcesso("erro");
       }
     }
 
@@ -169,6 +171,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
     limparPrepostoAdministrado();
     setPrepostoAdministrado(null);
     redirecionar("/equipe");
+  }
+
+  if (estadoAcesso === "erro") {
+    return <main className="loginPage"><section className="loginCard">
+      <h1>Não foi possível carregar o painel</h1>
+      <p role="alert">{erroAcesso}</p>
+      <button className="primary" onClick={() => window.location.reload()}>Tentar novamente</button>
+      <button className="loginSwitch" onClick={() => { void sair(); }}>Sair</button>
+    </section></main>;
   }
 
   if (estadoAcesso !== "autenticado" || !acesso) {

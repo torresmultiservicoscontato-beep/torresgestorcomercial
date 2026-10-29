@@ -40,6 +40,7 @@ export default function CadastroPrepostoPage() {
   const [verificando, setVerificando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [validado, setValidado] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -49,21 +50,32 @@ export default function CadastroPrepostoPage() {
 
     const clienteSupabase = supabase;
 
-    void clienteSupabase.auth.getUser().then(async ({ data, error }) => {
-      if (error || !data.user) {
-        await clienteSupabase.auth.signOut();
-        router.replace("/login");
-        return;
-      }
+    let ativo = true;
+    void (async () => {
+      try {
+        const { data, error } = await clienteSupabase.auth.getUser();
+        if (!ativo) return;
+        if (error || !data.user) {
+          router.replace("/login");
+          return;
+        }
 
-      const perfil = await carregarPerfilPrepostoAtual().catch(() => null);
-      if (perfil) {
-        router.replace("/preposto/vinculos");
-        return;
-      }
+        const perfil = await carregarPerfilPrepostoAtual();
+        if (!ativo) return;
+        if (perfil) {
+          router.replace("/preposto/vinculos");
+          return;
+        }
 
-      setVerificando(false);
-    });
+        if (ativo) { setValidado(true); setVerificando(false); }
+      } catch (falha) {
+        if (ativo) {
+          setErro(falha instanceof Error ? falha.message : "Não foi possível verificar seu cadastro.");
+          setVerificando(false);
+        }
+      }
+    })();
+    return () => { ativo = false; };
   }, [router]);
 
   function atualizar(campo: keyof Cadastro, valor: string) {
@@ -72,7 +84,7 @@ export default function CadastroPrepostoPage() {
 
   async function concluir(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (salvando) return;
+    if (salvando || !validado) return;
 
     setSalvando(true);
     setErro("");
@@ -102,6 +114,13 @@ export default function CadastroPrepostoPage() {
       </main>
     );
   }
+
+  if (!validado) return <main className="loginPage"><section className="loginCard">
+    <h1>Não foi possível verificar seu cadastro</h1>
+    <p role="alert">{erro}</p>
+    <button className="primary" onClick={() => window.location.reload()}>Tentar novamente</button>
+    <button className="loginSwitch" onClick={() => { void sair(); }}>Sair</button>
+  </section></main>;
 
   return (
     <main className="loginPage onboardingPage">

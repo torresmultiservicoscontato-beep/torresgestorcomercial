@@ -5,7 +5,7 @@ const fs=require('node:fs');const userId='11111111-1111-4111-8111-111111111111';
  const context=await browser.newContext({viewport:{width:1366,height:1000}});
  const user={id:userId,email:'teste@example.test',user_metadata:{},app_metadata:{},aud:'authenticated',role:'authenticated'};
  const token=[Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),Buffer.from(JSON.stringify({sub:userId,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),'mock'].join('.');
- await context.addInitScript(({token,user})=>localStorage.setItem('sb-sqlrhvxiluzgeldxcmyf-auth-token',JSON.stringify({access_token:token,refresh_token:'mock',expires_at:Math.floor(Date.now()/1000)+3600,user})),{token,user});
+ await context.addInitScript(({token,user})=>localStorage.setItem('sb-bwoxqsbqbtrkfvrsswrq-auth-token',JSON.stringify({access_token:token,refresh_token:'mock',expires_at:Math.floor(Date.now()/1000)+3600,user})),{token,user});
 
  let excluida=false,writes=0,falhar=false;
  await context.route('https://*.supabase.co/**',async route=>{

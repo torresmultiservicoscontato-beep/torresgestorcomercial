@@ -24,7 +24,7 @@ let falharConsulta=false;
  const browser=await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,args:['--no-sandbox','--disable-dev-shm-usage']} : {})});
  const context=await browser.newContext({viewport:{width:1440,height:1050},timezoneId:'America/Sao_Paulo'});
  const token=[Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url'),Buffer.from(JSON.stringify({sub:userId,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated'})).toString('base64url'),'mock-only'].join('.');
- await context.addInitScript(({token,user})=>localStorage.setItem('sb-sqlrhvxiluzgeldxcmyf-auth-token',JSON.stringify({access_token:token,refresh_token:'mock-only',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user})),{token,user});
+ await context.addInitScript(({token,user})=>localStorage.setItem('sb-bwoxqsbqbtrkfvrsswrq-auth-token',JSON.stringify({access_token:token,refresh_token:'mock-only',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user})),{token,user});
  await context.route('https://*.supabase.co/**',async route=>{
   const req=route.request(),u=new URL(req.url());let body;
   if(u.pathname==='/auth/v1/user') body=user;

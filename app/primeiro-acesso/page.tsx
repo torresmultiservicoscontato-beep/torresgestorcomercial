@@ -38,28 +38,40 @@ export default function PrimeiroAcessoPage() {
   const [verificando, setVerificando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [validado, setValidado] = useState(false);
 
   useEffect(() => {
     if (!supabase) { router.replace("/login"); return; }
 
     const clienteSupabase = supabase;
 
-    void clienteSupabase.auth.getUser().then(async ({ data, error }) => {
-      if (error || !data.user) {
-        await clienteSupabase.auth.signOut();
-        router.replace("/login");
-        return;
-      }
+    let ativo = true;
+    void (async () => {
+      try {
+        const { data, error } = await clienteSupabase.auth.getUser();
+        if (!ativo) return;
+        if (error || !data.user) {
+          router.replace("/login");
+          return;
+        }
 
-      if (data.user.user_metadata?.tipo_conta === "preposto") {
-        router.replace("/preposto/cadastro");
-        return;
-      }
+        if (data.user.user_metadata?.tipo_conta === "preposto") {
+          router.replace("/preposto/cadastro");
+          return;
+        }
 
-      const acesso = await carregarAcessoAtual().catch(() => null);
-      if (acesso) { router.replace("/"); return; }
-      setVerificando(false);
-    });
+        const acesso = await carregarAcessoAtual();
+        if (!ativo) return;
+        if (acesso) { router.replace("/"); return; }
+        if (ativo) { setValidado(true); setVerificando(false); }
+      } catch (falha) {
+        if (ativo) {
+          setErro(falha instanceof Error ? falha.message : "Não foi possível verificar seu cadastro.");
+          setVerificando(false);
+        }
+      }
+    })();
+    return () => { ativo = false; };
   }, [router]);
 
   function atualizar(campo: keyof Cadastro, valor: string) {
@@ -68,7 +80,7 @@ export default function PrimeiroAcessoPage() {
 
   async function concluir(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (salvando) return;
+    if (salvando || !validado) return;
 
     const representadas = listaRepresentadas(cadastro.representadas);
     if (representadas.length === 0) { setErro("Informe pelo menos uma representada."); return; }
@@ -96,6 +108,13 @@ export default function PrimeiroAcessoPage() {
   }
 
   if (verificando) return <main className="authLoading"><div className="brandMark">T</div><strong>Preparando seu primeiro acesso...</strong></main>;
+
+  if (!validado) return <main className="loginPage"><section className="loginCard">
+    <h1>Não foi possível verificar seu cadastro</h1>
+    <p role="alert">{erro}</p>
+    <button className="primary" onClick={() => window.location.reload()}>Tentar novamente</button>
+    <button className="loginSwitch" onClick={() => { void sair(); }}>Sair</button>
+  </section></main>;
 
   return (
     <main className="loginPage onboardingPage">

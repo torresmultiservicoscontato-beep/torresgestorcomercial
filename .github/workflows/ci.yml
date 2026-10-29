@@ -26,13 +26,24 @@ jobs:
       - run: npm ci
       - name: Testes unitários
         run: npm test
-      - name: Testes de interface
-        run: npm run test:ui
+      - name: Validar diagnóstico e contrato do ambiente
+        run: npm run test:environment
       - name: Verificar tipos
         run: npm run typecheck
-      - name: Verificar lint
-        run: npm run lint
       - name: Validar configuração segura dos ambientes
         run: node scripts/check-environment.cjs
       - name: Compilar aplicação
         run: npm run build
+      - name: Instalar navegador dos testes
+        run: npx playwright install --with-deps chromium
+      - name: Testes de interface com APIs simuladas
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run start -- --hostname 127.0.0.1 --port 3100 > /tmp/torres-ci-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          curl -fsS --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:3100/login > /tmp/torres-ci-login.html
+          npm run test:ui
+      - name: Verificar lint
+        run: npm run lint

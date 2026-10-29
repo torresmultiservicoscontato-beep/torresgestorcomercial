@@ -17,7 +17,7 @@ let favoritos=[];let idFavorito=0;
  const context=await browser.newContext({viewport:{width:1440,height:1050},timezoneId:'America/Sao_Paulo',acceptDownloads:true});
  const user={id:userId,aud:'authenticated',role:'authenticated',email:'teste@example.test',user_metadata:{},app_metadata:{},created_at:new Date().toISOString()};
  const token=[Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url'),Buffer.from(JSON.stringify({sub:userId,exp:Math.floor(Date.now()/1000)+3600,role:'authenticated'})).toString('base64url'),'mock'].join('.');
- await context.addInitScript(({token,user})=>localStorage.setItem('sb-sqlrhvxiluzgeldxcmyf-auth-token',JSON.stringify({access_token:token,refresh_token:'mock',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user})),{token,user});
+ await context.addInitScript(({token,user})=>localStorage.setItem('sb-bwoxqsbqbtrkfvrsswrq-auth-token',JSON.stringify({access_token:token,refresh_token:'mock',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user})),{token,user});
  await context.route('https://*.supabase.co/**',async route=>{
   const req=route.request(),u=new URL(req.url()),p=u.pathname;let body;requisicoes.push(p);
   if(p==='/auth/v1/user')body={...user,id:modo==='preposto'?prep:userId};

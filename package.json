@@ -9,7 +9,11 @@
     "lint": "eslint app",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test tests/*.test.mjs tests/atualizar-venda-itens.cjs tests/pedido-lotes.cjs tests/permissoes-exclusao.cjs tests/visita-venda-atomica.cjs",
-    "test:ui": "node --test tests/*-ui.cjs"
+    "test:ui": "node --test tests/*-ui.cjs",
+    "schema:audit": "node scripts/audit-test-schema.mjs",
+    "schema:contract": "node scripts/audit-test-schema.mjs --write-contract",
+    "schema:probe": "python3 scripts/check-test-environment.py",
+    "test:environment": "python3 -m unittest discover -s tests -p test_environment_probe.py && node scripts/audit-test-schema.mjs --check-contract"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.109.0",
