@@ -5,7 +5,7 @@ import Link from "next/link";
 import { LockKeyhole, Mail, UserRound, Users } from "lucide-react";
 import { carregarAcessoAtual } from "../lib/acesso";
 import { carregarPerfilPrepostoAtual } from "../lib/prepostoPerfil";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseConfigurationError } from "../lib/supabase";
 
 type ModoAcesso = "entrar" | "cadastrar" | "recuperar";
 type TipoConta = "representante" | "preposto";
@@ -15,14 +15,15 @@ function redirecionar(destino: string) {
 }
 
 async function destinoUsuarioLogado() {
-  const perfilPreposto = await carregarPerfilPrepostoAtual().catch(() => null);
+  const perfilPreposto = await carregarPerfilPrepostoAtual();
   if (perfilPreposto) return "/preposto/vinculos";
 
-  const acesso = await carregarAcessoAtual().catch(() => null);
+  const acesso = await carregarAcessoAtual();
   if (acesso) return "/";
 
   if (!supabase) return "/login";
-  const { data } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
   return data.user?.user_metadata?.tipo_conta === "preposto" ? "/preposto/cadastro" : "/primeiro-acesso";
 }
 
@@ -39,19 +40,28 @@ export default function LoginPage() {
     if (!supabase) return;
 
     const clienteSupabase = supabase;
-
-    void clienteSupabase.auth.getUser().then(async ({ data, error }) => {
-      if (error || !data.user) {
-        await clienteSupabase.auth.signOut();
-        return;
+    let ativo = true;
+    // Ausência de sessão não exige signOut: ele pode apagar um login em andamento.
+    void (async () => {
+      try {
+        const { data, error } = await clienteSupabase.auth.getUser();
+        if (error || !data.user || !ativo) return;
+        const destino = await destinoUsuarioLogado();
+        if (ativo) redirecionar(destino);
+      } catch {
+        if (ativo) setErro("Não foi possível verificar sua sessão. Confira a conexão e tente entrar novamente.");
       }
-      redirecionar(await destinoUsuarioLogado());
-    });
+    })();
+    return () => { ativo = false; };
   }, []);
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supabase || carregando) return;
+    if (carregando) return;
+    if (!supabase) {
+      setErro(supabaseConfigurationError ?? "Supabase não configurado.");
+      return;
+    }
 
     setCarregando(true);
     setErro("");
@@ -92,7 +102,12 @@ export default function LoginPage() {
       setMensagem("Conta criada. Confirme o e-mail recebido e depois entre para completar seu cadastro.");
       setModo("entrar");
     } catch (falha) {
-      setErro(falha instanceof Error ? falha.message : "Não foi possível concluir o acesso.");
+      const detalhe = falha instanceof Error ? falha.message : "Não foi possível concluir o acesso.";
+      setErro(/failed to fetch|fetch failed|networkerror|network request failed/i.test(detalhe)
+        ? "Não foi possível conectar ao serviço de acesso. Confira a conexão e a configuração do ambiente."
+        : detalhe === "Invalid login credentials"
+          ? "E-mail ou senha inválidos. Use uma conta do ambiente de testes quando estiver em testes."
+          : detalhe);
     } finally {
       setCarregando(false);
     }
@@ -119,7 +134,7 @@ export default function LoginPage() {
           <p>{descricao}</p>
         </div>
 
-        {erro && <div className="loginAlert error">{erro}</div>}
+        {(supabaseConfigurationError || erro) && <div role="alert" className="loginAlert error">{supabaseConfigurationError || erro}</div>}
         {mensagem && <div className="loginAlert success">{mensagem}</div>}
 
         <form onSubmit={enviar}>
@@ -148,7 +163,7 @@ export default function LoginPage() {
 
           {modo === "entrar" && <button className="forgotPassword" type="button" onClick={() => { setModo("recuperar"); setErro(""); setMensagem(""); }}>Esqueceu a senha?</button>}
 
-          <button className="primary wide" type="submit" disabled={carregando}>
+          <button className="primary wide" type="submit" disabled={carregando || !supabase}>
             {carregando ? "Aguarde..." : modo === "entrar" ? "Entrar" : modo === "cadastrar" ? "Criar acesso" : "Enviar link de recuperação"}
           </button>
         </form>

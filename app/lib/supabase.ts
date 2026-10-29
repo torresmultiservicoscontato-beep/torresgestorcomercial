@@ -13,26 +13,33 @@ const projectHosts: Record<string, string> = {
   production: "sqlrhvxiluzgeldxcmyf.supabase.co",
 };
 
-if (projectUrl || projectPublishableKey) {
+function validarConfiguracao(): string | null {
+  if (!projectUrl || !projectPublishableKey) {
+    return "Acesso indisponível: configure a URL e a chave pública do Supabase deste ambiente.";
+  }
   if (!projectHosts[appEnvironment]) {
-    throw new Error("Defina NEXT_PUBLIC_APP_ENV como test ou production.");
+    return "Configuração inválida: defina NEXT_PUBLIC_APP_ENV como test ou production.";
   }
-
-  let hostname: string;
   try {
-    hostname = new URL(projectUrl).hostname;
+    const url = new URL(projectUrl);
+    const hostname = url.hostname;
+    if (hostname !== projectHosts[appEnvironment] || url.protocol !== "https:" ||
+        url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) {
+      return "Supabase configurado não corresponde ao ambiente informado.";
+    }
   } catch {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL inválida.");
+    return "NEXT_PUBLIC_SUPABASE_URL inválida.";
   }
-
-  if (hostname !== projectHosts[appEnvironment]) {
-    throw new Error("Supabase configurado não corresponde ao ambiente informado.");
+  if (/^(COLE_|SUA_CHAVE)/i.test(projectPublishableKey)) {
+    return "Configure a chave pública real do projeto de testes; o valor do exemplo não é uma chave válida.";
   }
+  return null;
 }
 
 export const supabaseUrl = projectUrl;
 export const supabasePublishableKey = projectPublishableKey;
-export const supabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
+export const supabaseConfigurationError = validarConfiguracao();
+export const supabaseConfigured = supabaseConfigurationError === null;
 
 export const supabase = supabaseConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {
