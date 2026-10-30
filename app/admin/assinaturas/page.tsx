@@ -232,7 +232,7 @@ export default function PlanosAssinaturasPage() {
       <p className="eyebrow">ADMINISTRAÇÃO</p>
       <h1>Planos e Assinaturas</h1>
       <p>Acompanhe os planos, contas e vencimentos. Controle administrativo, sem cobrança automática.</p>
-      <Link href="/admin">Voltar ao painel administrativo</Link>
+      <Link href="/admin">Voltar ao painel administrativo</Link><p><Link className="secondary adminAccessButton" href="/admin/financeiro-assinaturas">Abrir Financeiro de Assinaturas</Link></p>
     </div></header>
     {carregando && <section className="panel settingsPanel">Carregando...</section>}
     {erro && <div className="loginAlert error settingsAlert" role="alert">{erro}</div>}
