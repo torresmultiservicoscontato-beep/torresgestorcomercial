@@ -9,6 +9,7 @@ import { listarUsuariosAdmin, type UsuarioAdmin } from "../../lib/admin";
 import { supabase } from "../../lib/supabase";
 
 type Plano = { id: string; nome: string; descricao: string; preco_mensal: number; ativo: boolean; modulos_incluidos: string[]; limite_representantes: number; limite_prepostos: number };
+type Solicitacao = { id: string; titular_user_id: string; plano_atual_id: string | null; plano_solicitado_id: string; status: string; criado_em: string };
 type Assinatura = { id: string; titular_user_id: string; plano_id: string | null; status: string; inicio_em: string | null; vencimento_em: string | null; valor_mensal: number; observacoes: string };
 const modulosDisponiveis = [
   { id: "inicio", nome: "Início" }, { id: "clientes", nome: "Clientes" },
@@ -31,6 +32,7 @@ export default function PlanosAssinaturasPage() {
   const [mensagem, setMensagem] = useState("");
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [assinaturas, setAssinaturas] = useState<Assinatura[]>([]);
+  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
@@ -48,15 +50,18 @@ export default function PlanosAssinaturasPage() {
 
   const carregar = useCallback(async () => {
     if (!supabase) throw new Error("Supabase indisponível.");
-    const [p, a, u] = await Promise.all([
+    const [p, a, u, pedidos] = await Promise.all([
       supabase.from("planos_assinatura").select("id,nome,descricao,preco_mensal,ativo,modulos_incluidos,limite_representantes,limite_prepostos").order("nome"),
       supabase.from("assinaturas_contas").select("id,titular_user_id,plano_id,status,inicio_em,vencimento_em,valor_mensal,observacoes").order("vencimento_em"),
       listarUsuariosAdmin(),
+      supabase.from("solicitacoes_troca_plano").select("id,titular_user_id,plano_atual_id,plano_solicitado_id,status,criado_em").order("criado_em", { ascending: false }),
     ]);
     if (p.error) throw new Error(p.error.message);
     if (a.error) throw new Error(a.error.message);
     setPlanos(p.data ?? []);
     setAssinaturas(a.data ?? []);
+    if (pedidos.error) throw new Error(pedidos.error.message);
+    setSolicitacoes(pedidos.data ?? []);
     setUsuarios(u);
   }, []);
 
@@ -141,6 +146,21 @@ export default function PlanosAssinaturasPage() {
     finally { setSalvando(false); }
   }
 
+  async function responderSolicitacao(id: string, aprovar: boolean) {
+    if (!supabase || salvando) return;
+    if (!window.confirm(aprovar ? "Aprovar mudança de plano desta conta?" : "Recusar solicitação de mudança?")) return;
+    setSalvando(true); setErro(""); setMensagem("");
+    try {
+      const { error } = await supabase.rpc("admin_responder_troca_plano", {
+        p_solicitacao_id: id, p_aprovar: aprovar,
+      });
+      if (error) throw new Error(error.message);
+      await carregar();
+      setMensagem(aprovar ? "Mudança de plano aprovada." : "Solicitação recusada.");
+    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível responder à solicitação."); }
+    finally { setSalvando(false); }
+  }
+
   function editarPlano(plano: Plano) {
     setEditandoPlano(plano.id);
     setNome(plano.nome); setPreco(String(plano.preco_mensal)); setDescricao(plano.descricao);
@@ -218,6 +238,21 @@ export default function PlanosAssinaturasPage() {
         <article><span>Assinaturas ativas</span><strong>{totalAtivas}</strong><small>Contas ativas</small></article>
         <article><span>Em atraso</span><strong>{atrasadas}</strong><small>Acompanhar vencimentos</small></article>
         <article><span>Receita mensal prevista</span><strong>{moeda(receitaPrevista)}</strong><small>Estimativa, não recebimento confirmado</small></article>
+      </section>
+      <section className="panel settingsPanel">
+        <div className="panelTitle"><div><p className="eyebrow">APROVAÇÕES</p><h2>Solicitações de mudança de plano</h2></div></div>
+        {solicitacoes.filter(s => s.status === "pendente").length === 0 ? <p>Nenhuma solicitação pendente.</p> :
+          <div className="adminTableWrap"><table className="adminTable"><thead><tr><th>Conta</th><th>Plano atual</th><th>Plano solicitado</th><th>Data</th><th>Ações</th></tr></thead><tbody>
+            {solicitacoes.filter(s => s.status === "pendente").map(s => <tr key={s.id}>
+              <td>{usuarios.find(u => u.userId === s.titular_user_id)?.nome ?? "Conta"}</td>
+              <td>{planos.find(p => p.id === s.plano_atual_id)?.nome ?? "Sem plano"}</td>
+              <td>{planos.find(p => p.id === s.plano_solicitado_id)?.nome ?? "Plano indisponível"}</td>
+              <td>{new Date(s.criado_em).toLocaleDateString("pt-BR")}</td>
+              <td><div style={{display:"flex",gap:8}}>
+                <button type="button" className="primary" disabled={salvando} onClick={() => void responderSolicitacao(s.id, true)}>Aprovar</button>
+                <button type="button" className="secondary" disabled={salvando} onClick={() => void responderSolicitacao(s.id, false)}>Recusar</button>
+              </div></td>
+            </tr>)}</tbody></table></div>}
       </section>
       <section className="panel settingsPanel">
         <div className="panelTitle"><div><p className="eyebrow">CATÁLOGO</p><h2>Planos disponíveis</h2></div></div>
