@@ -8,7 +8,7 @@ import { carregarPerfilAtual } from "../../lib/perfil";
 import { listarUsuariosAdmin, type UsuarioAdmin } from "../../lib/admin";
 import { supabase } from "../../lib/supabase";
 
-type Plano = { id: string; nome: string; descricao: string; preco_mensal: number; ativo: boolean; modulos_incluidos: string[]; limite_representantes: number; limite_prepostos: number };
+type Plano = { id: string; nome: string; descricao: string; preco_mensal: number; ativo: boolean; modulos_incluidos: string[]; limite_representantes: number; limite_prepostos: number; prazo_exportacao_dias: number; encerramento_acesso: string };
 type Solicitacao = { id: string; titular_user_id: string; plano_atual_id: string | null; plano_solicitado_id: string; status: string; criado_em: string };
 type Assinatura = { id: string; titular_user_id: string; plano_id: string | null; status: string; inicio_em: string | null; vencimento_em: string | null; valor_mensal: number; observacoes: string };
 const modulosDisponiveis = [
@@ -40,6 +40,8 @@ export default function PlanosAssinaturasPage() {
   const [modulosSelecionados, setModulosSelecionados] = useState<string[]>([]);
   const [limiteRepresentantes, setLimiteRepresentantes] = useState("1");
   const [limitePrepostos, setLimitePrepostos] = useState("0");
+  const [prazoExportacao, setPrazoExportacao] = useState("30");
+  const [encerramentoAcesso, setEncerramentoAcesso] = useState("imediato");
   const [titular, setTitular] = useState("");
   const [planoId, setPlanoId] = useState("");
   const [status, setStatus] = useState("pendente");
@@ -51,7 +53,7 @@ export default function PlanosAssinaturasPage() {
   const carregar = useCallback(async () => {
     if (!supabase) throw new Error("Supabase indisponível.");
     const [p, a, u, pedidos] = await Promise.all([
-      supabase.from("planos_assinatura").select("id,nome,descricao,preco_mensal,ativo,modulos_incluidos,limite_representantes,limite_prepostos").order("nome"),
+      supabase.from("planos_assinatura").select("id,nome,descricao,preco_mensal,ativo,modulos_incluidos,limite_representantes,limite_prepostos,prazo_exportacao_dias,encerramento_acesso").order("nome"),
       supabase.from("assinaturas_contas").select("id,titular_user_id,plano_id,status,inicio_em,vencimento_em,valor_mensal,observacoes").order("vencimento_em"),
       listarUsuariosAdmin(),
       supabase.from("solicitacoes_troca_plano").select("id,titular_user_id,plano_atual_id,plano_solicitado_id,status,criado_em").order("criado_em", { ascending: false }),
@@ -97,14 +99,16 @@ export default function PlanosAssinaturasPage() {
       const prepostos = Number(limitePrepostos);
       if (!Number.isInteger(representantes) || representantes < 0 || !Number.isInteger(prepostos) || prepostos < 0) throw new Error("Informe limites inteiros e não negativos.");
       if (modulosSelecionados.length === 0) throw new Error("Selecione ao menos uma funcionalidade para o plano.");
-      const dados = { nome: nome.trim(), descricao: descricao.trim(), preco_mensal: valor,
+      const prazo = Number(prazoExportacao);
+      if (!Number.isInteger(prazo) || prazo < 1 || prazo > 365) throw new Error("Informe um prazo de exportação entre 1 e 365 dias.");
+      const dados = { prazo_exportacao_dias: prazo, encerramento_acesso: encerramentoAcesso, nome: nome.trim(), descricao: descricao.trim(), preco_mensal: valor,
         modulos_incluidos: modulosSelecionados, limite_representantes: representantes, limite_prepostos: prepostos };
       const consulta = editandoPlano
         ? supabase.from("planos_assinatura").update(dados).eq("id", editandoPlano)
         : supabase.from("planos_assinatura").insert(dados);
       const { error } = await consulta;
       if (error) throw new Error(error.message);
-      setNome(""); setPreco(""); setDescricao(""); setModulosSelecionados([]); setLimiteRepresentantes("1"); setLimitePrepostos("0");
+      setNome(""); setPreco(""); setDescricao(""); setModulosSelecionados([]); setLimiteRepresentantes("1"); setLimitePrepostos("0"); setPrazoExportacao("30"); setEncerramentoAcesso("imediato");
       setEditandoPlano(null);
       await carregar(); setMensagem(editandoPlano ? "Plano atualizado." : "Plano cadastrado.");
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível cadastrar o plano."); }
@@ -167,12 +171,13 @@ export default function PlanosAssinaturasPage() {
     setModulosSelecionados(plano.modulos_incluidos ?? []);
     setLimiteRepresentantes(String(plano.limite_representantes));
     setLimitePrepostos(String(plano.limite_prepostos));
+    setPrazoExportacao(String(plano.prazo_exportacao_dias)); setEncerramentoAcesso(plano.encerramento_acesso);
     document.getElementById("form-plano")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function cancelarEdicaoPlano() {
     setEditandoPlano(null); setNome(""); setPreco(""); setDescricao("");
-    setModulosSelecionados([]); setLimiteRepresentantes("1"); setLimitePrepostos("0");
+    setModulosSelecionados([]); setLimiteRepresentantes("1"); setLimitePrepostos("0"); setPrazoExportacao("30"); setEncerramentoAcesso("imediato");
   }
 
   function editarAssinatura(assinatura: Assinatura) {
@@ -256,7 +261,7 @@ export default function PlanosAssinaturasPage() {
       </section>
       <section className="panel settingsPanel">
         <div className="panelTitle"><div><p className="eyebrow">CATÁLOGO</p><h2>Planos disponíveis</h2></div></div>
-        {planos.length === 0 ? <p>Nenhum plano cadastrado.</p> : <div className="adminTableWrap"><table className="adminTable"><thead><tr><th>Plano</th><th>Descrição</th><th>Valor mensal</th><th>Representantes</th><th>Prepostos</th><th>Funcionalidades</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{planos.map(p => <tr key={p.id}><td><strong>{p.nome}</strong></td><td>{p.descricao || "—"}</td><td>{moeda(p.preco_mensal)}</td><td>{p.limite_representantes}</td><td>{p.limite_prepostos}</td><td>{p.modulos_incluidos?.length ? p.modulos_incluidos.map(id => modulosDisponiveis.find(m => m.id === id)?.nome ?? id).join(", ") : "Nenhuma selecionada"}</td><td>{p.ativo ? "Ativo" : "Inativo"}</td><td><div style={{display:"flex",gap:8}}><button type="button" className="secondary" disabled={salvando} onClick={() => editarPlano(p)}>Editar</button><button type="button" className="secondary" title={"Excluir " + p.nome} aria-label={"Excluir plano " + p.nome} disabled={salvando} onClick={() => void excluirPlano(p)}>🗑 Excluir</button></div></td></tr>)}</tbody></table></div>}
+        {planos.length === 0 ? <p>Nenhum plano cadastrado.</p> : <div className="adminTableWrap"><table className="adminTable"><thead><tr><th>Plano</th><th>Descrição</th><th>Valor mensal</th><th>Representantes</th><th>Prepostos</th><th>Funcionalidades</th><th>Exportação</th><th>Encerramento</th><th>Situação</th><th>Ações</th></tr></thead><tbody>{planos.map(p => <tr key={p.id}><td><strong>{p.nome}</strong></td><td>{p.descricao || "—"}</td><td>{moeda(p.preco_mensal)}</td><td>{p.limite_representantes}</td><td>{p.limite_prepostos}</td><td>{p.modulos_incluidos?.length ? p.modulos_incluidos.map(id => modulosDisponiveis.find(m => m.id === id)?.nome ?? id).join(", ") : "Nenhuma selecionada"}</td><td>{p.prazo_exportacao_dias} dias</td><td>{p.encerramento_acesso === "fim_periodo_pago" ? "Fim do período pago" : "Imediato"}</td><td>{p.ativo ? "Ativo" : "Inativo"}</td><td><div style={{display:"flex",gap:8}}><button type="button" className="secondary" disabled={salvando} onClick={() => editarPlano(p)}>Editar</button><button type="button" className="secondary" title={"Excluir " + p.nome} aria-label={"Excluir plano " + p.nome} disabled={salvando} onClick={() => void excluirPlano(p)}>🗑 Excluir</button></div></td></tr>)}</tbody></table></div>}
         <h3 id="form-plano">{editandoPlano ? "Editar plano" : "Novo plano"}</h3>
         <form onSubmit={gravarPlano} className="signupGrid">
           <label className="field">Nome<input required value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Profissional" /></label>
@@ -264,6 +269,9 @@ export default function PlanosAssinaturasPage() {
           <label className="field signupSpan2">Descrição<input value={descricao} onChange={e => setDescricao(e.target.value)} /></label>
           <label className="field">Quantidade máxima de representantes<input type="number" required min="0" step="1" value={limiteRepresentantes} onChange={e => setLimiteRepresentantes(e.target.value)} /></label>
           <label className="field">Quantidade máxima de prepostos<input type="number" required min="0" step="1" value={limitePrepostos} onChange={e => setLimitePrepostos(e.target.value)} /></label>
+          <label className="field">Prazo de recuperação e exportação (dias)<input type="number" required min="1" max="365" step="1" value={prazoExportacao} onChange={e => setPrazoExportacao(e.target.value)} /></label>
+          <label className="field">Encerramento do acesso operacional<select value={encerramentoAcesso} onChange={e => setEncerramentoAcesso(e.target.value)}><option value="imediato">No momento do cancelamento</option><option value="fim_periodo_pago">Ao final do período pago</option></select></label>
+          <p className="signupSpan2">Formatos de exportação disponibilizados ao assinante: ZIP com CSV por módulo e Excel. O prazo definido acima será aplicado à política de cancelamento deste plano.</p>
           <fieldset className="signupSpan2" style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: 16 }}>
             <legend style={{ fontWeight: 700, padding: "0 6px" }}>Funcionalidades incluídas no plano</legend>
             <p style={{ margin: "0 0 12px" }}>Marque os módulos do menu lateral incluídos.</p>
