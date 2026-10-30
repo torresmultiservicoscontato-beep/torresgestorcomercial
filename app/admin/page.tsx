@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, ClipboardCheck, CreditCard, Eye, ShieldCheck, UserRoundCog, Users } from "lucide-react";
+import { Building2, ClipboardCheck, CreditCard, LifeBuoy, Eye, ShieldCheck, UserRoundCog, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "../components/AppShell";
 import { definirRepresentanteAdministrado } from "../lib/adminContext";
@@ -80,6 +80,7 @@ export default function AdminPage() {
           <h1>Painel do Admin</h1>
           <p>Escolha um representante para abrir e administrar o painel operacional dele.</p>
           <Link className="secondary adminAccessButton" href="/admin/assinaturas" style={{display:"inline-flex",alignItems:"center",gap:8,marginTop:12}}><CreditCard size={17} /> Planos e Assinaturas</Link>
+          <Link className="secondary adminAccessButton" href="/admin/suporte" style={{display:"inline-flex",alignItems:"center",gap:8,marginTop:12,marginLeft:8}}><LifeBuoy size={17} /> Atendimento e Suporte</Link>
         </div>
       </header>
 
