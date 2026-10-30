@@ -8,8 +8,17 @@ import { carregarPerfilAtual } from "../../lib/perfil";
 import { listarUsuariosAdmin, type UsuarioAdmin } from "../../lib/admin";
 import { supabase } from "../../lib/supabase";
 
-type Plano = { id: string; nome: string; descricao: string; preco_mensal: number; ativo: boolean };
+type Plano = { id: string; nome: string; descricao: string; preco_mensal: number; ativo: boolean; modulos_incluidos: string[]; limite_representantes: number; limite_prepostos: number };
 type Assinatura = { id: string; titular_user_id: string; plano_id: string | null; status: string; inicio_em: string | null; vencimento_em: string | null; valor_mensal: number; observacoes: string };
+const modulosDisponiveis = [
+  { id: "inicio", nome: "Início" }, { id: "clientes", nome: "Clientes" },
+  { id: "representadas", nome: "Representadas" }, { id: "produtos", nome: "Produtos" },
+  { id: "rotas", nome: "Rotas" }, { id: "visitas", nome: "Visitas" },
+  { id: "vendas", nome: "Vendas" }, { id: "comissoes", nome: "Comissões" },
+  { id: "despesas", nome: "Despesas" }, { id: "agenda", nome: "Agenda" },
+  { id: "relatorios", nome: "Relatórios" }, { id: "equipe", nome: "Equipe" },
+  { id: "configuracoes", nome: "Configurações" }, { id: "historico", nome: "Histórico" },
+] as const;
 const statusDisponiveis = ["pendente", "teste", "ativa", "atrasada", "suspensa", "cancelada"];
 const moeda = (valor: number) => Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -26,6 +35,9 @@ export default function PlanosAssinaturasPage() {
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [modulosSelecionados, setModulosSelecionados] = useState<string[]>([]);
+  const [limiteRepresentantes, setLimiteRepresentantes] = useState("1");
+  const [limitePrepostos, setLimitePrepostos] = useState("0");
   const [titular, setTitular] = useState("");
   const [planoId, setPlanoId] = useState("");
   const [status, setStatus] = useState("pendente");
@@ -34,7 +46,7 @@ export default function PlanosAssinaturasPage() {
   const carregar = useCallback(async () => {
     if (!supabase) throw new Error("Supabase indisponível.");
     const [p, a, u] = await Promise.all([
-      supabase.from("planos_assinatura").select("id,nome,descricao,preco_mensal,ativo").order("nome"),
+      supabase.from("planos_assinatura").select("id,nome,descricao,preco_mensal,ativo,modulos_incluidos,limite_representantes,limite_prepostos").order("nome"),
       supabase.from("assinaturas_contas").select("id,titular_user_id,plano_id,status,inicio_em,vencimento_em,valor_mensal,observacoes").order("vencimento_em"),
       listarUsuariosAdmin(),
     ]);
@@ -73,11 +85,16 @@ export default function PlanosAssinaturasPage() {
     try {
       const valor = Number(preco.replace(",", "."));
       if (!Number.isFinite(valor) || valor < 0) throw new Error("Informe um preço válido.");
+      const representantes = Number(limiteRepresentantes);
+      const prepostos = Number(limitePrepostos);
+      if (!Number.isInteger(representantes) || representantes < 0 || !Number.isInteger(prepostos) || prepostos < 0) throw new Error("Informe limites inteiros e não negativos.");
+      if (modulosSelecionados.length === 0) throw new Error("Selecione ao menos uma funcionalidade para o plano.");
       const { error } = await supabase.from("planos_assinatura").insert({
         nome: nome.trim(), descricao: descricao.trim(), preco_mensal: valor,
+        modulos_incluidos: modulosSelecionados, limite_representantes: representantes, limite_prepostos: prepostos,
       });
       if (error) throw new Error(error.message);
-      setNome(""); setPreco(""); setDescricao("");
+      setNome(""); setPreco(""); setDescricao(""); setModulosSelecionados([]); setLimiteRepresentantes("1"); setLimitePrepostos("0");
       await carregar(); setMensagem("Plano cadastrado.");
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível cadastrar o plano."); }
     finally { setSalvando(false); }
@@ -140,12 +157,30 @@ export default function PlanosAssinaturasPage() {
       </section>
       <section className="panel settingsPanel">
         <div className="panelTitle"><div><p className="eyebrow">CATÁLOGO</p><h2>Planos disponíveis</h2></div></div>
-        {planos.length === 0 ? <p>Nenhum plano cadastrado.</p> : <div className="adminTableWrap"><table className="adminTable"><thead><tr><th>Plano</th><th>Descrição</th><th>Valor mensal</th><th>Situação</th></tr></thead><tbody>{planos.map(p => <tr key={p.id}><td><strong>{p.nome}</strong></td><td>{p.descricao || "—"}</td><td>{moeda(p.preco_mensal)}</td><td>{p.ativo ? "Ativo" : "Inativo"}</td></tr>)}</tbody></table></div>}
+        {planos.length === 0 ? <p>Nenhum plano cadastrado.</p> : <div className="adminTableWrap"><table className="adminTable"><thead><tr><th>Plano</th><th>Descrição</th><th>Valor mensal</th><th>Representantes</th><th>Prepostos</th><th>Funcionalidades</th><th>Situação</th></tr></thead><tbody>{planos.map(p => <tr key={p.id}><td><strong>{p.nome}</strong></td><td>{p.descricao || "—"}</td><td>{moeda(p.preco_mensal)}</td><td>{p.limite_representantes}</td><td>{p.limite_prepostos}</td><td>{p.modulos_incluidos?.length ? p.modulos_incluidos.map(id => modulosDisponiveis.find(m => m.id === id)?.nome ?? id).join(", ") : "Nenhuma selecionada"}</td><td>{p.ativo ? "Ativo" : "Inativo"}</td></tr>)}</tbody></table></div>}
         <h3>Novo plano</h3>
         <form onSubmit={gravarPlano} className="signupGrid">
           <label className="field">Nome<input required value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Profissional" /></label>
           <label className="field">Mensalidade (R$)<input required type="number" min="0" step="0.01" value={preco} onChange={e => setPreco(e.target.value)} /></label>
           <label className="field signupSpan2">Descrição<input value={descricao} onChange={e => setDescricao(e.target.value)} /></label>
+          <label className="field">Quantidade máxima de representantes<input type="number" required min="0" step="1" value={limiteRepresentantes} onChange={e => setLimiteRepresentantes(e.target.value)} /></label>
+          <label className="field">Quantidade máxima de prepostos<input type="number" required min="0" step="1" value={limitePrepostos} onChange={e => setLimitePrepostos(e.target.value)} /></label>
+          <fieldset className="signupSpan2" style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: 16 }}>
+            <legend style={{ fontWeight: 700, padding: "0 6px" }}>Funcionalidades incluídas no plano</legend>
+            <p style={{ margin: "0 0 12px" }}>Marque os módulos do menu lateral incluídos.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+              {modulosDisponiveis.map(modulo => (
+                <label key={modulo.id} style={{ display: "flex", gap: 9, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={modulosSelecionados.includes(modulo.id)} onChange={e => setModulosSelecionados(atuais => e.target.checked ? [...atuais, modulo.id] : atuais.filter(id => id !== modulo.id))} />
+                  {modulo.nome}
+                </label>
+              ))}
+            </div>
+            <div style={{ marginTop: 12, display: "flex", gap: 14 }}>
+              <button className="secondary" type="button" onClick={() => setModulosSelecionados(modulosDisponiveis.map(m => m.id))}>Selecionar todas</button>
+              <button className="secondary" type="button" onClick={() => setModulosSelecionados([])}>Limpar seleção</button>
+            </div>
+          </fieldset>
           <button className="primary" type="submit" disabled={salvando}>Cadastrar plano</button>
         </form>
       </section>
