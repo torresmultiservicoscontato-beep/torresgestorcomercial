@@ -12,6 +12,7 @@ import {
   Landmark,
   LogOut,
   MapPinned,
+  CreditCard,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -66,6 +67,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [estadoAcesso, setEstadoAcesso] = useState<"verificando" | "autenticado" | "sem-acesso" | "erro">("verificando");
   const [erroAcesso, setErroAcesso] = useState("");
   const [email, setEmail] = useState("");
+  const [modulosPlano, setModulosPlano] = useState<string[] | null>(null);
   const [acesso, setAcesso] = useState<AcessoSistema | null>(null);
   const [representanteAdministrado, setRepresentanteAdministrado] = useState<RepresentanteAdministrado | null>(null);
   const [prepostoAdministrado, setPrepostoAdministrado] = useState<PrepostoAdministrado | null>(null);
@@ -120,6 +122,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
           preposto = null;
         }
 
+        // Administradores mantêm acesso global. Demais contas seguem o plano do titular.
+        if (acessoAtual.papel === "admin") {
+          setModulosPlano(null);
+        } else {
+          const { data: assinatura, error: erroPlano } = await clienteSupabase
+            .from("assinaturas_contas").select("status,planos_assinatura(modulos_incluidos)")
+            .eq("titular_user_id", acessoAtual.titularUserId).maybeSingle();
+          if (erroPlano) throw new Error("Não foi possível validar seu plano: " + erroPlano.message);
+          const ativo = assinatura && ["ativa", "teste"].includes(assinatura.status);
+          const registro = assinatura?.planos_assinatura;
+          const plano = Array.isArray(registro) ? registro[0] : registro;
+          setModulosPlano(ativo && plano && "modulos_incluidos" in plano && Array.isArray(plano.modulos_incluidos)
+            ? plano.modulos_incluidos : []);
+        }
         setAcesso(acessoAtual);
         setRepresentanteAdministrado(representante);
         setPrepostoAdministrado(preposto);
@@ -194,22 +210,33 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const menuOperacional = operacionais.filter((item) => {
-    if (item.modulo === "inicio" || item.modulo === "representadas" || item.modulo === "produtos" || item.modulo === "comissoes") return true;
-    return pode(acesso, item.modulo, "visualizar");
-  });
+  const permitidoPlano = (modulo: string) => acesso.papel === "admin" || modulo === "inicio" || modulo === "meu-plano" || (modulosPlano?.includes(modulo) ?? false);
+  const menuOperacional = operacionais.filter(item =>
+    permitidoPlano(item.modulo) && (item.modulo === "inicio" || pode(acesso, item.modulo, "visualizar"))
+  );
 
   const menu = acesso.papel === "preposto"
-    ? menuOperacional
+    ? [...menuOperacional, { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true }]
     : [
         ...menuOperacional,
-        { label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: true },
-        { label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: true },
-        { label: "Histórico", href: "/historico", icon: ClipboardCheck, modulo: "historico", enabled: true },
+        { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true },
+        ...(permitidoPlano("equipe") ? [{ label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: true }] : []),
+        ...(permitidoPlano("configuracoes") ? [{ label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: true }] : []),
+        ...(permitidoPlano("historico") ? [{ label: "Histórico", href: "/historico", icon: ClipboardCheck, modulo: "historico", enabled: true }] : []),
         ...(acesso.papel === "admin"
           ? [{ label: "Admin", href: "/admin", icon: ShieldCheck, modulo: "admin", enabled: true }]
           : []),
       ];
+
+  const rotasModulos: Record<string,string> = {
+    "/clientes":"clientes", "/representadas":"representadas", "/produtos":"produtos",
+    "/rotas":"rotas", "/visitas":"visitas", "/vendas":"vendas",
+    "/comissoes":"comissoes", "/despesas":"despesas", "/agenda":"agenda",
+    "/relatorios":"relatorios", "/equipe":"equipe", "/configuracoes":"configuracoes",
+    "/historico":"historico"
+  };
+  const moduloRota = Object.entries(rotasModulos).find(([rota]) => pathname === rota || pathname.startsWith(rota + "/"))?.[1];
+  const acessoNegado = moduloRota && !permitidoPlano(moduloRota);
 
   return (
     <main className="shell">
@@ -322,7 +349,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        {children}
+        {acessoNegado ? <section className="panel settingsPanel" role="alert">
+          <h2>Funcionalidade não incluída no seu plano</h2>
+          <p>Este módulo está indisponível na assinatura atual. Você pode solicitar uma mudança ao Administrador Geral.</p>
+          <Link href="/meu-plano">Ver meu plano e solicitar alteração</Link>
+        </section> : children}
       </section>
     </main>
   );
