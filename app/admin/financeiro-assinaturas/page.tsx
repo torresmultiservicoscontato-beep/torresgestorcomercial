@@ -29,7 +29,14 @@ async function emitirAsaas(c:Cobranca,forma:"PIX"|"BOLETO"){
  setSalvando(true);setErro("");setMensagem("");
  try{
    const {data,error}=await supabase.functions.invoke("asaas-sandbox-emitir",{body:{cobranca_id:c.id,forma}});
-   if(error)throw Error(error.message);
+   if(error){
+     let detalhe=error.message;
+     const resposta=(error as {context?:Response}).context;
+     if(resposta && typeof resposta.json==="function"){
+       try{const corpo=await resposta.json(); detalhe=corpo?.error??corpo?.reason??detalhe;}catch{}
+     }
+     throw Error(detalhe);
+   }
    if(!data?.ok)throw Error(data?.error??"Asaas não confirmou emissão");
    await carregar();
    setMensagem("Cobrança "+forma+" emitida no Asaas Sandbox. O link aparece no histórico e no painel do assinante.");
