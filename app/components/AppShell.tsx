@@ -211,18 +211,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   const permitidoPlano = (modulo: string) => acesso.papel === "admin" || modulo === "inicio" || modulo === "meu-plano" || (modulosPlano?.includes(modulo) ?? false);
-  const menuOperacional = operacionais.filter(item =>
-    permitidoPlano(item.modulo) && (item.modulo === "inicio" || pode(acesso, item.modulo, "visualizar"))
-  );
+  const menuOperacional = operacionais.map(item => ({
+    ...item,
+    enabled: permitidoPlano(item.modulo) && (item.modulo === "inicio" || pode(acesso, item.modulo, "visualizar")),
+  }));
 
   const menu = acesso.papel === "preposto"
     ? [...menuOperacional, { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true }]
     : [
         ...menuOperacional,
         { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true },
-        ...(permitidoPlano("equipe") ? [{ label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: true }] : []),
-        ...(permitidoPlano("configuracoes") ? [{ label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: true }] : []),
-        ...(permitidoPlano("historico") ? [{ label: "Histórico", href: "/historico", icon: ClipboardCheck, modulo: "historico", enabled: true }] : []),
+        { label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: permitidoPlano("equipe") },
+        { label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: permitidoPlano("configuracoes") },
+        { label: "Histórico", href: "/historico", icon: ClipboardCheck, modulo: "historico", enabled: permitidoPlano("historico") },
         ...(acesso.papel === "admin"
           ? [{ label: "Admin", href: "/admin", icon: ShieldCheck, modulo: "admin", enabled: true }]
           : []),
@@ -255,7 +256,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
             if (!enabled) {
               return (
-                <span className="navDisabled" key={label} title="Em breve">
+                <span className="navDisabled" key={label} title="Não incluído no seu plano ou sem permissão de acesso" aria-disabled="true">
                   <Icon size={20} />
                   {label}
                 </span>
