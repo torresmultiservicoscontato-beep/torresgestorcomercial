@@ -13,6 +13,7 @@ import {
   LogOut,
   MapPinned,
   CreditCard,
+  LifeBuoy,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -216,11 +217,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
     enabled: permitidoPlano(item.modulo) && (item.modulo === "inicio" || pode(acesso, item.modulo, "visualizar")),
   }));
 
+  const suporteItem = { label: "Suporte", href: "/meus-chamados", icon: LifeBuoy, modulo: "suporte", enabled: true };
   const menu = acesso.papel === "preposto"
-    ? [...menuOperacional, { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true }]
+    ? [...menuOperacional, { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true }, suporteItem]
     : [
         ...menuOperacional,
         { label: "Meu plano", href: "/meu-plano", icon: CreditCard, modulo: "meu-plano", enabled: true },
+        suporteItem,
         { label: "Equipe", href: "/equipe", icon: Users, modulo: "equipe", enabled: permitidoPlano("equipe") },
         { label: "Configurações", href: "/configuracoes", icon: Settings, modulo: "configuracoes", enabled: permitidoPlano("configuracoes") },
         { label: "Histórico", href: "/historico", icon: ClipboardCheck, modulo: "historico", enabled: permitidoPlano("historico") },
