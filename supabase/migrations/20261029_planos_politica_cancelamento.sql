@@ -1,0 +1,1 @@
+ALTER TABLE public.planos_assinatura ADD COLUMN IF NOT EXISTS prazo_exportacao_dias integer NOT NULL DEFAULT 30 CHECK (prazo_exportacao_dias BETWEEN 1 AND 365), ADD COLUMN IF NOT EXISTS encerramento_acesso text NOT NULL DEFAULT 'imediato' CHECK (encerramento_acesso IN ('imediato','fim_periodo_pago'));
