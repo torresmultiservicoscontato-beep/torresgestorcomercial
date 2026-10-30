@@ -131,7 +131,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
             .from("assinaturas_contas").select("status,planos_assinatura(modulos_incluidos)")
             .eq("titular_user_id", acessoAtual.titularUserId).maybeSingle();
           if (erroPlano) throw new Error("Não foi possível validar seu plano: " + erroPlano.message);
-          const ativo = assinatura && ["ativa", "teste"].includes(assinatura.status);
+          const { data: cancelamento, error: erroCancelamento } = await clienteSupabase.from("cancelamentos_assinatura")
+            .select("encerramento_em").eq("titular_user_id", acessoAtual.titularUserId)
+            .eq("status", "registrado").order("solicitado_em", { ascending: false }).limit(1).maybeSingle();
+          if (erroCancelamento) throw new Error("Não foi possível validar o cancelamento: " + erroCancelamento.message);
+          const hoje = new Date().toLocaleDateString("en-CA");
+          const ativo = assinatura && ["ativa", "teste"].includes(assinatura.status)
+            && (!cancelamento || cancelamento.encerramento_em > hoje);
           const registro = assinatura?.planos_assinatura;
           const plano = Array.isArray(registro) ? registro[0] : registro;
           setModulosPlano(ativo && plano && "modulos_incluidos" in plano && Array.isArray(plano.modulos_incluidos)
